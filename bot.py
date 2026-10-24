@@ -152,7 +152,7 @@ def import_snapshot(folder):
     if (folder / "agent-history.jsonl").exists() or not (snapshot / "agent-history.jsonl").exists():
         return
     folder.mkdir(parents=True, exist_ok=True)
-    for name in ("agent-history.jsonl", "agent-model.json"):
+    for name in ("agent-history.jsonl", "agent-model.json", "live.jsonl", "latest-state.json"):
         if (snapshot / name).exists():
             shutil.copyfile(str(snapshot / name), str(folder / name))
     print("Loaded the team's learned data from data/.", flush=True)

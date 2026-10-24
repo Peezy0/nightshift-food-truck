@@ -1,0 +1,695 @@
+{
+  "observed_at": "2026-10-24T05:49:38.468706+00:00",
+  "version": 214,
+  "mode": "live",
+  "market": 1,
+  "markets": 1,
+  "day": 25,
+  "days": 65,
+  "phase": "night",
+  "phase_ends_at": "2026-10-24T05:50:00.000Z",
+  "server_time": "2026-10-24T05:49:38.048Z",
+  "orders_open": true,
+  "order_for_day": 26,
+  "rules": {
+    "budget": 500,
+    "costs": {
+      "cheap": 2.5,
+      "standard": 3.75,
+      "premium": 5.5
+    },
+    "values": {
+      "cheap": 8,
+      "standard": 12,
+      "premium": 16
+    },
+    "spots": [
+      "oval",
+      "thompson",
+      "union",
+      "stadium",
+      "highst",
+      "northres"
+    ],
+    "spot_names": {
+      "oval": "The Oval",
+      "thompson": "Thompson Library",
+      "union": "Ohio Union",
+      "stadium": "Ohio Stadium",
+      "highst": "High Street",
+      "northres": "North Res"
+    },
+    "qualities": [
+      "cheap",
+      "standard",
+      "premium"
+    ],
+    "price_min": 1,
+    "price_max": 30,
+    "move_costs": {
+      "oval": {
+        "thompson": 3,
+        "union": 7,
+        "stadium": 8,
+        "highst": 6,
+        "northres": 8
+      },
+      "thompson": {
+        "oval": 3,
+        "union": 7,
+        "stadium": 7,
+        "highst": 8,
+        "northres": 8
+      },
+      "union": {
+        "oval": 7,
+        "thompson": 7,
+        "stadium": 12,
+        "highst": 8,
+        "northres": 11
+      },
+      "stadium": {
+        "oval": 8,
+        "thompson": 7,
+        "union": 12,
+        "highst": 12,
+        "northres": 10
+      },
+      "highst": {
+        "oval": 6,
+        "thompson": 8,
+        "union": 8,
+        "stadium": 12,
+        "northres": 6
+      },
+      "northres": {
+        "oval": 8,
+        "thompson": 8,
+        "union": 11,
+        "stadium": 10,
+        "highst": 6
+      }
+    },
+    "staff": {
+      "meals_per_employee": 50,
+      "default_staff": 4,
+      "default_wage": 6,
+      "staff_max": 10,
+      "wage_min": 5,
+      "wage_max": 60
+    }
+  },
+  "features": {
+    "fair_choice": true,
+    "walk_over": true,
+    "salvage": true,
+    "food": false,
+    "moving_costs": true,
+    "new_spots": false,
+    "surprises": true,
+    "football": true,
+    "riots": false,
+    "coupons": false,
+    "staff": true,
+    "planned_counts": false,
+    "elections": true
+  },
+  "forecast": {
+    "day": 26,
+    "weather": {
+      "clear": 0.53,
+      "cloudy": 0.3,
+      "rain": 0.15,
+      "cold": 0.02
+    },
+    "events": [
+      {
+        "key": "concert",
+        "name": "Concert at the Union",
+        "spot": "union",
+        "effect": "a big crowd at the Union"
+      },
+      {
+        "key": "rally",
+        "name": "Rally on the Oval",
+        "spot": "oval",
+        "effect": "a crowd on the Oval"
+      }
+    ],
+    "crowds": {
+      "oval": "huge",
+      "thompson": "medium",
+      "union": "high",
+      "stadium": "low",
+      "highst": "high",
+      "northres": "medium"
+    },
+    "expected_customers": {
+      "oval": 233,
+      "thompson": 87,
+      "union": 203,
+      "stadium": 47,
+      "highst": 147,
+      "northres": 99
+    }
+  },
+  "spot_info": {
+    "oval": {
+      "name": "The Oval",
+      "x": 100,
+      "z": 70,
+      "region": "core",
+      "opened_day": 1
+    },
+    "thompson": {
+      "name": "Thompson Library",
+      "x": -12,
+      "z": 140,
+      "region": "core",
+      "opened_day": 1
+    },
+    "union": {
+      "name": "Ohio Union",
+      "x": 440,
+      "z": 388,
+      "region": "core",
+      "opened_day": 1
+    },
+    "stadium": {
+      "name": "Ohio Stadium",
+      "x": -490,
+      "z": 48,
+      "region": "core",
+      "opened_day": 1
+    },
+    "highst": {
+      "name": "High Street",
+      "x": 463,
+      "z": -186,
+      "region": "core",
+      "opened_day": 1
+    },
+    "northres": {
+      "name": "North Res",
+      "x": 170,
+      "z": -478,
+      "region": "core",
+      "opened_day": 1
+    }
+  },
+  "you": {
+    "id": "t_876b0a",
+    "truck_name": "BIg Buck",
+    "company_name": "BIgBuckLLC",
+    "cash": 2779.4,
+    "reputation": {
+      "oval": 100,
+      "thompson": 59.52,
+      "union": 62.79,
+      "stadium": 50,
+      "highst": 54.81,
+      "northres": 51.03
+    },
+    "order": {
+      "spot": "oval",
+      "price": 10.75,
+      "quality": "standard",
+      "meals": 133
+    },
+    "last_spot": "oval",
+    "staff": {
+      "employees": 3,
+      "target": 3,
+      "wage": 11,
+      "capacity": 150,
+      "idle_days": 0
+    },
+    "coupons": null,
+    "coupons_dropped": null,
+    "wrecked_until_day": null,
+    "vote": null,
+    "news": [
+      {
+        "day": 24,
+        "kind": "rules",
+        "text": "From day 25, every game day has an opponent, the last one is Michigan, and a National Championship may follow."
+      },
+      {
+        "day": 24,
+        "kind": "politics",
+        "text": "Election called: polls close before day 27. Chad Fisher, MBA (the flat fee, the North campus curfew), Brock Lee (the tax on the top, the North campus curfew), Gov. Ina Grant (the flat fee, the quiet core rule). Vote with POST /api/v1/vote."
+      },
+      {
+        "day": 23,
+        "kind": "rules",
+        "text": "From day 24, surprise fire drills and free food giveaways can thin a spot's crowd; they're revealed when the day plays."
+      },
+      {
+        "day": 21,
+        "kind": "rules",
+        "text": "From day 22, moving to a different spot than the one you last sold at costs $2 plus $0.01 a metre."
+      },
+      {
+        "day": 21,
+        "kind": "rules",
+        "text": "From day 22, trucks need employees to open: each serves 50 meals a day and is paid a daily wage."
+      },
+      {
+        "day": 21,
+        "kind": "rules",
+        "text": "From day 22, campus elections: every truck votes, the winner's laws change the game for a term, and the groups those laws hurt may protest the trucks that voted for them."
+      }
+    ]
+  },
+  "last_day": {
+    "day": 25,
+    "weather": "clear",
+    "events": [],
+    "spots": {
+      "oval": {
+        "customers": 139,
+        "hungry": 34,
+        "walked_in": 0,
+        "walked_out": 15,
+        "trucks": [
+          {
+            "id": "t_876b0a",
+            "price": 11.25,
+            "quality": "premium",
+            "meals": 90,
+            "sold": 90,
+            "employees": 3,
+            "truck_name": "BIg Buck",
+            "color": "#5ec0e8"
+          }
+        ]
+      },
+      "thompson": {
+        "customers": 89,
+        "hungry": 18,
+        "walked_in": 27,
+        "walked_out": 3,
+        "trucks": [
+          {
+            "id": "t_d64e26",
+            "price": 8.25,
+            "quality": "standard",
+            "meals": 95,
+            "sold": 95,
+            "employees": 2,
+            "truck_name": "T.H.E Truck",
+            "color": "#ff5a5f"
+          }
+        ]
+      },
+      "union": {
+        "customers": 117,
+        "hungry": 22,
+        "walked_in": 0,
+        "walked_out": 7,
+        "trucks": [
+          {
+            "id": "t_e2de7d",
+            "price": 10.5,
+            "quality": "premium",
+            "meals": 88,
+            "sold": 88,
+            "employees": 4,
+            "truck_name": "IBE",
+            "color": "#8fd16a"
+          }
+        ]
+      },
+      "stadium": {
+        "customers": 48,
+        "hungry": 42,
+        "walked_in": 0,
+        "walked_out": 6,
+        "trucks": []
+      },
+      "highst": {
+        "customers": 160,
+        "hungry": 59,
+        "walked_in": 4,
+        "walked_out": 0,
+        "trucks": [
+          {
+            "id": "t_96a96a",
+            "price": 10,
+            "quality": "premium",
+            "meals": 90,
+            "sold": 66,
+            "employees": 4,
+            "truck_name": "Wagyu Express",
+            "color": "#f2a93b"
+          },
+          {
+            "id": "t_d0c136",
+            "price": 11.25,
+            "quality": "premium",
+            "meals": 90,
+            "sold": 39,
+            "employees": 4,
+            "truck_name": "Frontrun Fries",
+            "color": "#c08cff"
+          }
+        ]
+      },
+      "northres": {
+        "customers": 107,
+        "hungry": 40,
+        "walked_in": 0,
+        "walked_out": 0,
+        "trucks": [
+          {
+            "id": "t_5f2743",
+            "price": 9.3,
+            "quality": "standard",
+            "meals": 67,
+            "sold": 67,
+            "employees": 4,
+            "truck_name": "Cheapest Eats",
+            "color": "#ffd23f"
+          }
+        ]
+      }
+    },
+    "you": {
+      "status": "played",
+      "spot": "oval",
+      "price": 11.25,
+      "quality": "premium",
+      "meals": 90,
+      "sold": 90,
+      "revenue": 1012.5,
+      "cost": 495,
+      "profit": 484.5,
+      "spoiled": 0,
+      "salvage": 0,
+      "move_cost": 0,
+      "employees": 3,
+      "capacity": 150,
+      "wages": 33
+    },
+    "moments": [],
+    "labor": []
+  },
+  "trucks": [
+    {
+      "id": "t_e2de7d",
+      "truck_name": "IBE",
+      "company_name": "Jolly",
+      "color": "#8fd16a",
+      "cash": 5479.26,
+      "reputation_avg": 61.6,
+      "employees": 4,
+      "wage": 6,
+      "badge": null
+    },
+    {
+      "id": "t_96a96a",
+      "truck_name": "Wagyu Express",
+      "company_name": "Oriental Dishes",
+      "color": "#f2a93b",
+      "cash": 2838.06,
+      "reputation_avg": 60,
+      "employees": 4,
+      "wage": 6,
+      "badge": null
+    },
+    {
+      "id": "t_5f2743",
+      "truck_name": "Cheapest Eats",
+      "company_name": "Burgers & Fries",
+      "color": "#ffd23f",
+      "cash": 2788.58,
+      "reputation_avg": 61.6,
+      "employees": 4,
+      "wage": 6,
+      "badge": null
+    },
+    {
+      "id": "t_876b0a",
+      "truck_name": "BIg Buck",
+      "company_name": "BIgBuckLLC",
+      "color": "#5ec0e8",
+      "cash": 2779.4,
+      "reputation_avg": 63,
+      "employees": 3,
+      "wage": 11,
+      "badge": null
+    },
+    {
+      "id": "t_d0c136",
+      "truck_name": "Frontrun Fries",
+      "company_name": "Tres Hermanos",
+      "color": "#c08cff",
+      "cash": 1648.09,
+      "reputation_avg": 60.7,
+      "employees": 4,
+      "wage": 10,
+      "badge": null
+    },
+    {
+      "id": "t_d64e26",
+      "truck_name": "T.H.E Truck",
+      "company_name": "Truck Home Eats",
+      "color": "#ff5a5f",
+      "cash": 555.16,
+      "reputation_avg": 61.6,
+      "employees": 2,
+      "wage": 6.5,
+      "badge": null
+    }
+  ],
+  "labor": {
+    "unemployed": 19,
+    "lowest_asking_wage": 5.35,
+    "median_asking_wage": 6.42
+  },
+  "politics": {
+    "office": null,
+    "election": {
+      "id": "e1",
+      "called_day": 24,
+      "vote_day": 27,
+      "nights_left": 2,
+      "candidates": [
+        {
+          "id": "c1",
+          "name": "Chad Fisher, MBA",
+          "slogan": "Sell more, keep more",
+          "talking_points": [
+            "Hustle should pay. Sell more, keep more.",
+            "Quiet nights, busy Oval. My kind of campus.",
+            "Sell more, keep more."
+          ],
+          "policies": [
+            {
+              "key": "flat_fee",
+              "text": "Flat fee: every truck that opens pays $20, and earns a 10% bonus on revenue above $500 a day",
+              "params": {
+                "revenue_share": 0.1,
+                "above": 500,
+                "flat": -20
+              }
+            },
+            {
+              "key": "curfew",
+              "text": "North campus curfew: High Street and North Res crowds x 0.75; the Oval, Thompson and the Union x 1.1",
+              "params": {
+                "crowd": {
+                  "highst": 0.75,
+                  "northres": 0.75,
+                  "oval": 1.1,
+                  "thompson": 1.1,
+                  "union": 1.1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "c2",
+          "name": "Brock Lee",
+          "slogan": "Quiet nights, safe streets",
+          "talking_points": [
+            "The big trucks can spare 10% over $500. Everyone else gets $20.",
+            "High Street can get some sleep. Lunch moves back to the Oval.",
+            "Quiet nights, safe streets."
+          ],
+          "policies": [
+            {
+              "key": "tax_top",
+              "text": "Tax the top: 10% of each truck's revenue above $500 a day, and every truck that opens gets $20",
+              "params": {
+                "revenue_share": -0.1,
+                "above": 500,
+                "flat": 20
+              }
+            },
+            {
+              "key": "curfew",
+              "text": "North campus curfew: High Street and North Res crowds x 0.75; the Oval, Thompson and the Union x 1.1",
+              "params": {
+                "crowd": {
+                  "highst": 0.75,
+                  "northres": 0.75,
+                  "oval": 1.1,
+                  "thompson": 1.1,
+                  "union": 1.1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "c3",
+          "name": "Gov. Ina Grant",
+          "slogan": "Sell more, keep more",
+          "talking_points": [
+            "Same fee for everybody. Simple. Like a grilled cheese.",
+            "Let the library breathe. The party moves up to High Street.",
+            "Sell more, keep more."
+          ],
+          "policies": [
+            {
+              "key": "flat_fee",
+              "text": "Flat fee: every truck that opens pays $20, and earns a 10% bonus on revenue above $500 a day",
+              "params": {
+                "revenue_share": 0.1,
+                "above": 500,
+                "flat": -20
+              }
+            },
+            {
+              "key": "quiet_core",
+              "text": "Quiet core: the Oval, Thompson and the Union crowds x 0.85; High Street and North Res x 1.2",
+              "params": {
+                "crowd": {
+                  "oval": 0.85,
+                  "thompson": 0.85,
+                  "union": 0.85,
+                  "highst": 1.2,
+                  "northres": 1.2
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "tally": {
+        "c1": 1,
+        "c2": 0,
+        "c3": 2
+      },
+      "votes": {
+        "t_d64e26": "c1",
+        "t_5f2743": "c3",
+        "t_96a96a": "c3"
+      }
+    },
+    "laws": [],
+    "next_vote_day": 27,
+    "history": []
+  },
+  "announcements": [
+    {
+      "at": "2026-10-24T05:40:00.162Z",
+      "day": 26,
+      "kind": "event",
+      "text": "Tomorrow: Rally on the Oval. A crowd on the Oval."
+    },
+    {
+      "at": "2026-10-24T05:40:00.162Z",
+      "day": 26,
+      "kind": "event",
+      "text": "Tomorrow: Concert at the Union. A big crowd at the Union."
+    },
+    {
+      "at": "2026-10-24T05:40:00.162Z",
+      "day": 25,
+      "kind": "day",
+      "text": "Day 25: BIg Buck made $485 at The Oval."
+    },
+    {
+      "at": "2026-10-24T05:31:09.425Z",
+      "day": 25,
+      "kind": "rules",
+      "text": "From day 25, every game day has an opponent, the last one is Michigan, and a National Championship may follow.",
+      "title": "New rule"
+    },
+    {
+      "at": "2026-10-24T05:30:00.048Z",
+      "day": 27,
+      "kind": "politics",
+      "text": "Election! Polls close before day 27. Chad Fisher, MBA: the flat fee and the North campus curfew. Brock Lee: the tax on the top and the North campus curfew. Gov. Ina Grant: the flat fee and the quiet core rule. Every truck has one vote.",
+      "title": "Election",
+      "election": "e1"
+    },
+    {
+      "at": "2026-10-24T05:30:00.048Z",
+      "day": 24,
+      "kind": "day",
+      "text": "Day 24: IBE made $290 at Ohio Union."
+    },
+    {
+      "at": "2026-10-24T05:20:31.573Z",
+      "day": 24,
+      "kind": "rules",
+      "text": "From day 24, surprise fire drills and free food giveaways can thin a spot's crowd; they're revealed when the day plays.",
+      "title": "New rule"
+    },
+    {
+      "at": "2026-10-24T05:20:00.147Z",
+      "day": 23,
+      "kind": "day",
+      "text": "Day 23: Frontrun Fries made $478 at High Street."
+    },
+    {
+      "at": "2026-10-24T05:10:00.226Z",
+      "day": 23,
+      "kind": "event",
+      "text": "Tomorrow: Late-night rush. After the bars close, High Street and North Res are hungry and the rest of campus is asleep."
+    },
+    {
+      "at": "2026-10-24T05:10:00.226Z",
+      "day": 22,
+      "kind": "day",
+      "text": "Day 22: Frontrun Fries made $379 at High Street."
+    },
+    {
+      "at": "2026-10-24T05:06:36.768Z",
+      "day": 22,
+      "kind": "rules",
+      "text": "From day 22, moving to a different spot than the one you last sold at costs $2 plus $0.01 a metre.",
+      "title": "New rule"
+    },
+    {
+      "at": "2026-10-24T05:06:01.966Z",
+      "day": 22,
+      "kind": "rules",
+      "text": "From day 22, trucks need employees to open: each serves 50 meals a day and is paid a daily wage.",
+      "title": "New rule"
+    },
+    {
+      "at": "2026-10-24T05:05:10.194Z",
+      "day": 22,
+      "kind": "rules",
+      "text": "From day 22, campus elections: every truck votes, the winner's laws change the game for a term, and the groups those laws hurt may protest the trucks that voted for them.",
+      "title": "New rule"
+    },
+    {
+      "at": "2026-10-24T05:00:00.085Z",
+      "day": 21,
+      "kind": "day",
+      "text": "Day 21: Cheapest Eats made $763 at Ohio Stadium."
+    },
+    {
+      "at": "2026-10-24T04:50:00.186Z",
+      "day": 21,
+      "kind": "event",
+      "text": "Tomorrow: Game day. 100,000 fans: a huge crowd at the Stadium and a busier campus everywhere."
+    }
+  ]
+}
