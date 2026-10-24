@@ -107,6 +107,14 @@ The dashboard's Profit agent panel shows all of this. If the agent ever fails, `
 - **Read the docs again when rules change.** The organizers change rules mid-night (announced on the TV and in `state.announcements`); the docs at https://nightshift.joinbuilders.org/kitchen-e551e5/ are the source of truth.
 - **Freeze at 6 AM.** No code changes after that; the final starts at 8:30 AM. Live days don't count toward the ranking; only the final's average profit per market does.
 
+## Watching for rule changes (with Claude Code)
+
+The organizers switch rules on and off during the night. The bot reads `state.features` every night, but a person (or Claude) should still check each change. To get alerted, open Claude Code in this folder and paste:
+
+> Watch for Night Shift rule changes. Start a Monitor (30-minute timeout, re-arm it when it expires) that every 5 seconds reads `logs/latest-state.json` and prints a line whenever `features` changes or a new announcement with kind `rules` or `schedule` appears. When one fires, read the latest docs at https://nightshift.joinbuilders.org/kitchen-e551e5/ for that rule, tell me what it means for our truck, and propose (don't deploy) any change. Never edit `agent.py` in this folder to experiment, since the live bot reloads it; never call /staff, /vote or /coupons without asking me first.
+
+The watch only runs while that Claude Code session stays open; the bot runs either way. Our crew setting (3 employees at $11) and voting (the agent abstains unless a candidate is clearly better for us than the protest risk) are already handled.
+
 ## Switching computers
 
 Only one bot may run for the truck. The handover must fit inside one day phase (5 minutes since day 15): the old bot stops right after that night's order is in, and the new one starts before the next night opens. If it misses, the truck sits out one live day, which doesn't count toward the final.
