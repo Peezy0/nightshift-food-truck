@@ -539,6 +539,51 @@ footer {
   color: var(--quiet);
   font-size: 0.72rem;
 }
+.agent-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
+}
+.agent-kpis .last-kpi strong {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.agent-table {
+  min-width: 460px;
+}
+.agent-gap {
+  margin-top: var(--space-lg);
+}
+.agent-rivals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0 var(--space-xl);
+  margin-bottom: var(--space-md);
+}
+.agent-rival {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.79rem;
+}
+.agent-rival strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-rival span {
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.agent-rival span:last-child {
+  grid-column: 1/-1;
+  text-align: left;
+  color: var(--quiet);
+  font-size: 0.72rem;
+}
 @media (max-width: 1100px) {
   .command-bar {
     grid-template-columns: repeat(3, 1fr);
@@ -614,7 +659,8 @@ footer {
   .secondary-column {
     display: flex;
   }
-  .last-summary {
+  .last-summary,
+  .agent-kpis {
     grid-template-columns: 1fr 1fr;
   }
   .section-heading {

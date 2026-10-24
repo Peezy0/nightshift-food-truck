@@ -28,6 +28,18 @@ python3 status.py
 
 `analyze.py` summarizes finished days. `status.py` explains the latest state captured by the running bot: version, mode, market and day, phase and server clock, order window, rules, forecast, your truck and current order, the entire last day's spot results, trucks, and announcements. It reads `logs/latest-state.json` locally and needs no truck key in the second terminal. `last_day` is the actual outcome; the forecast is for the *next* day. After the next day starts, run `status.py` again to see how the previous order performed.
 
+## Profit agent
+
+`agent.py` plans each night's order for expected profit. It learns from every completed day: how much customers will pay at each spot, which spots each rival tends to park at and what it charges, and how far the forecast runs high or low. Each night it simulates the customer queue for every spot, quality, price and meal count, and picks the order with the best risk-adjusted profit, cooking a little leaner after losing days. A plan takes about 50 ms, so it fits the final's 2-second limit. If the agent errors or proposes an order that breaks the rules, the bot logs an `agent_error` event and falls back to the original `decide(state)` heuristic. Practice runs use the agent but do not save its history, because house bots are not the real rivals.
+
+It uses no AI model and no credits. It writes three files, all in the git-ignored `logs/` folder:
+
+- `agent-history.jsonl`: one line per completed day (spots, trucks, prices, sales) that it has seen.
+- `agent-model.json`: the learned customer price limits, forecast bias, and prediction checks.
+- `agent-plan.json`: the latest plan, shown in the dashboard's "Profit agent" section as a forecast, separate from actual results.
+
+A bot that is already running keeps using the old heuristic. To pick up the agent, press `Ctrl+C` in the bot terminal and run `python3 bot.py` again. You can do this at any time, even in the middle of a night: the restarted bot plans once and replaces the existing order for the open day. On startup it also reads `logs/latest-state.json` so the last completed day is not lost.
+
 ## Local dashboard
 
 For a browser view, leave `python3 bot.py` running in its first terminal. In a **second** VS Code terminal in this folder, run:

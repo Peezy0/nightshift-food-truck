@@ -13,6 +13,8 @@ import time
 import urllib.error
 import urllib.request
 
+from agent import Agent
+
 
 API = "https://nightshift.joinbuilders.org/api/v1"
 QUALITY_COST = {"cheap": 2.5, "standard": 3.75, "premium": 5.5}
@@ -80,7 +82,64 @@ class EventLog:
                 self.warned = True
 
 
-def log_decision(log, state, order):
+def valid_order(order, rules):
+    """True when an order obeys the published limits, so a bad plan is never submitted."""
+    try:
+        if not isinstance(order, dict):
+            return False
+        qualities = rules.get("qualities") or QUALITY_COST
+        costs = rules.get("costs") or QUALITY_COST
+        meals = order["meals"]
+        price = float(order["price"])
+        return (order["spot"] in (rules.get("spots") or SPOTS)
+                and order["quality"] in qualities
+                and float(rules.get("price_min", 1)) <= price <= float(rules.get("price_max", 30))
+                and isinstance(meals, int) and not isinstance(meals, bool) and meals >= 0
+                and meals * float(costs.get(order["quality"], QUALITY_COST.get(order["quality"], 0)))
+                <= float(rules.get("budget", 500)) + 1e-9)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def choose_order(agent, state, log=None):
+    """Ask the profit agent for an order; fall back to the heuristic on any failure.
+
+    Returns (order, report). The report is None when the heuristic made the choice."""
+    try:
+        order, report = agent.plan(state)
+        if order is None:
+            return decide(state), None
+        if not valid_order(order, state.get("rules") or {}):
+            raise ValueError("invalid agent order {}".format(order))
+        return order, report
+    except Exception as error:  # The agent must never stop the bot from ordering.
+        if log is not None:
+            log.write("agent_error", stage="plan", error_type=type(error).__name__,
+                      message=str(error)[:200])
+        print("Agent plan failed, using fallback: {}".format(error), file=sys.stderr, flush=True)
+        return decide(state), None
+
+
+def observe_state(agent, state, log):
+    """Feed the agent a state without letting a learning error interrupt the loop."""
+    try:
+        agent.observe(state)
+    except Exception as error:
+        log.write("agent_error", stage="observe", error_type=type(error).__name__,
+                  message=str(error)[:200])
+        print("Agent observe failed: {}".format(error), file=sys.stderr, flush=True)
+
+
+def seed_agent(agent, log):
+    """Learn from the saved snapshot so a restart does not lose the last completed day."""
+    try:
+        with (log.path.parent / "latest-state.json").open(encoding="utf-8") as source:
+            observe_state(agent, json.load(source), log)
+    except (OSError, ValueError):
+        pass
+
+
+def log_decision(log, state, order, report=None):
     spot = order["spot"]
     previous = ((state.get("last_day") or {}).get("spots") or {}).get(spot) or {}
     rivals = [truck for truck in previous.get("trucks") or []
@@ -94,7 +153,11 @@ def log_decision(log, state, order):
               reputation=((state.get("you") or {}).get("reputation") or {}).get(spot),
               recent_rivals=len(rivals), estimated_rivals=estimate_rivals(state, spot),
               event_spot=any(event.get("spot") == spot for event in forecast.get("events") or []),
-              recent_rival_prices=[truck.get("price") for truck in rivals])
+              recent_rival_prices=[truck.get("price") for truck in rivals],
+              source="agent" if report else "heuristic",
+              expected_profit=(report or {}).get("expected_profit"),
+              expected_sold=(report or {}).get("expected_sold"),
+              p_loss=(report or {}).get("p_loss"))
 
 
 def log_result(log, state):
@@ -181,7 +244,7 @@ def decide(state):
     return {"spot": best_spot, "price": price, "quality": quality, "meals": meals}
 
 
-def practice(key, days, rivals, seed, log):
+def practice(key, days, rivals, seed, log, agent):
     options = {"days": days, "rivals": rivals}
     if seed:
         options["seed"] = seed
@@ -189,8 +252,9 @@ def practice(key, days, rivals, seed, log):
     base = "https://nightshift.joinbuilders.org" + game["base"]
     state = request("GET", base + "/state", key)
     while state.get("phase") != "over":
-        order = decide(state)
-        log_decision(log, state, order)
+        observe_state(agent, state, log)
+        order, report = choose_order(agent, state, log)
+        log_decision(log, state, order, report)
         result = request("POST", base + "/orders", key, order, timeout=10)
         state = result.get("state") or request("GET", base + "/state", key)
         log_result(log, state)
@@ -202,9 +266,11 @@ def practice(key, days, rivals, seed, log):
         float((state.get("you") or {}).get("cash") or 0)), flush=True)
 
 
-def live(key, log):
+def live(key, log, agent):
     version = 0
     seen_results = set()
+    planned = {}
+    sent = set()
     connected = False
     while True:
         try:
@@ -223,17 +289,26 @@ def live(key, log):
             if last.get("day") is not None and result_id not in seen_results:
                 log_result(log, state)
                 seen_results.add(result_id)
+            observe_state(agent, state, log)
             if state.get("phase") == "night" and state.get("orders_open"):
                 day = state.get("order_for_day")
                 existing = (state.get("you") or {}).get("order")
-                if not existing:
-                    order = decide(state)
-                    log_decision(log, state, order)
+                plan_id = (state.get("mode"), state.get("market"), day)
+                # Plan once per day per run, keep the choice if the POST must be retried, and
+                # let it replace an older order (for example from before a restart).
+                if plan_id not in planned:
+                    planned[plan_id] = choose_order(agent, state, log)
+                order, report = planned[plan_id]
+                if plan_id not in sent and (not existing or any(
+                        existing.get(field) != value for field, value in order.items())):
+                    log_decision(log, state, order, report)
                     started = time.monotonic()
                     response = request("POST", API + "/orders", key, order, timeout=5)
                     elapsed_ms = round((time.monotonic() - started) * 1000)
+                    sent.add(plan_id)
                     log.write("order_submitted", mode=state.get("mode"), market=state.get("market"),
-                              day=day, order=order, latency_ms=elapsed_ms)
+                              day=day, order=order, latency_ms=elapsed_ms,
+                              source="agent" if report else "heuristic")
                     (state.get("you") or {})["order"] = response.get("order") or order
                     print("{} market {} day {}: submitted {}".format(
                         state.get("mode"), state.get("market"), day, order), flush=True)
@@ -272,10 +347,13 @@ def main():
         log_path = folder / ("practice-{}-{}.jsonl".format(stamp, os.getpid()) if args.practice else "live.jsonl")
     log = EventLog(log_path)
     log.write("run_started", mode="practice" if args.practice else "live", log_path=str(log.path))
+    # Practice runs use house bots, so keep them out of the live history.
+    agent = Agent(log.path.parent, persist=not args.practice)
     if args.practice:
-        practice(key, args.days, args.rivals, args.seed, log)
+        practice(key, args.days, args.rivals, args.seed, log, agent)
     else:
-        live(key, log)
+        seed_agent(agent, log)
+        live(key, log, agent)
 
 
 if __name__ == "__main__":

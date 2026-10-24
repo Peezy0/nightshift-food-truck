@@ -76,6 +76,7 @@ def snapshot(log_dir):
     return {
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "state": state,
+        "plan": read_json(log_dir / "agent-plan.json"),
         "log_exists": (log_dir / "live.jsonl").exists(),
         "activity_at": last_activity,
         "latest_order": market_orders[-1] if market_orders else None,

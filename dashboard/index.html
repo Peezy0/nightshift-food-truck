@@ -71,10 +71,59 @@
               </div>
             </section>
 
+            <section class="section" aria-labelledby="agent-heading">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">02 / Forecast, not a result</span>
+                  <h2 id="agent-heading">Profit agent</h2>
+                </div>
+                <span id="agent-badge" class="pill">Waiting</span>
+              </div>
+              <div id="agent-summary" class="empty-copy">
+                The profit agent’s plan will appear here when it has one.
+              </div>
+              <div id="agent-detail" hidden>
+                <div class="subtle-line">Best order per spot (expected, not actual)</div>
+                <div class="table-scroll">
+                  <table class="agent-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Spot</th>
+                        <th scope="col">Order</th>
+                        <th scope="col">Exp. profit</th>
+                        <th scope="col">Loss chance</th>
+                        <th scope="col">Exp. rivals</th>
+                      </tr>
+                    </thead>
+                    <tbody id="agent-rows"></tbody>
+                  </table>
+                </div>
+                <div class="subtle-line agent-gap">Where rivals are expected</div>
+                <div id="agent-rivals" class="agent-rivals"></div>
+                <div class="subtle-line agent-gap">
+                  Prediction vs actual (recent days)
+                </div>
+                <div class="table-scroll">
+                  <table class="agent-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Day</th>
+                        <th scope="col">Spot</th>
+                        <th scope="col">Sold exp / actual</th>
+                        <th scope="col">Profit exp / actual</th>
+                        <th scope="col">Rivals exp / actual</th>
+                      </tr>
+                    </thead>
+                    <tbody id="agent-checks"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
             <section class="section" aria-labelledby="forecast-heading">
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">02 / Plan ahead</span>
+                  <span class="eyebrow">03 / Plan ahead</span>
                   <h2 id="forecast-heading">Forecast</h2>
                 </div>
                 <span id="forecast-day" class="section-aside">—</span>
@@ -105,7 +154,7 @@
             <section class="section" aria-labelledby="last-heading">
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">03 / Actual outcome</span>
+                  <span class="eyebrow">04 / Actual outcome</span>
                   <h2 id="last-heading">Last completed day</h2>
                 </div>
                 <span id="last-day" class="section-aside">—</span>
@@ -147,7 +196,7 @@
             >
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">04 / This market</span>
+                  <span class="eyebrow">05 / This market</span>
                   <h2 id="performance-heading">Performance</h2>
                 </div>
               </div>
@@ -158,7 +207,7 @@
             <section class="section" aria-labelledby="rules-heading">
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">05 / Constraints</span>
+                  <span class="eyebrow">06 / Constraints</span>
                   <h2 id="rules-heading">Rules</h2>
                 </div>
               </div>
@@ -167,7 +216,7 @@
             <section class="section" aria-labelledby="standings-heading">
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">06 / Rivals</span>
+                  <span class="eyebrow">07 / Rivals</span>
                   <h2 id="standings-heading">Market standings</h2>
                 </div>
               </div>
@@ -178,7 +227,7 @@
             <section class="section" aria-labelledby="news-heading">
               <div class="section-heading">
                 <div>
-                  <span class="eyebrow">07 / Updates</span>
+                  <span class="eyebrow">08 / Updates</span>
                   <h2 id="news-heading">Announcements</h2>
                 </div>
               </div>

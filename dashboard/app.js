@@ -200,6 +200,74 @@ function renderOrder(data) {
     `<div class="order-location">${esc(spotName(order.spot, rules))}<small>Day ${esc(orderDay ?? "—")} · ${esc(order.quality || "—")} quality</small></div><div class="order-stat"><span class="label">Price / meal</span><strong>${esc(money(order.price))}</strong></div><div class="order-stat"><span class="label">Meals cooked</span><strong>${esc(number(order.meals))}</strong></div><div class="order-stat"><span class="label">Food cost</span><strong>${esc(money(foodCost))}</strong></div><div class="order-note">${breakEven === null ? "Break-even unavailable" : `Needs ${esc(number(breakEven))} sales to cover food cost`} · Budget ${esc(money(rules.budget))} · Unsold meals spoil</div>`;
 }
 
+function renderAgent(data) {
+  const plan = data.plan,
+    state = data.state || {},
+    rules = state.rules || {};
+  const badge = $("agent-badge"),
+    summary = $("agent-summary"),
+    detail = $("agent-detail");
+  const open = state.order_for_day != null;
+  const stale =
+    plan &&
+    open &&
+    (plan.day !== state.order_for_day ||
+      plan.market !== state.market ||
+      plan.mode !== state.mode);
+  if (!plan || !plan.order || stale) {
+    badge.textContent = plan ? "Stale" : "No plan";
+    badge.className = "pill warn";
+    summary.className = "empty-copy";
+    summary.textContent = plan
+      ? `The saved plan is for day ${plan.day ?? "—"}, but the coming day is ${state.order_for_day}. The agent has not planned this day yet, so these numbers are out of date.`
+      : "No agent plan saved yet. Restart the bot with the latest code; it writes logs/agent-plan.json when it plans an order.";
+    detail.hidden = true;
+    return;
+  }
+  badge.textContent = open ? `Day ${plan.day} forecast` : `Last plan · day ${plan.day}`;
+  badge.className = "pill";
+  summary.className = "agent-summary";
+  const kpis = [
+    ["Expected profit", money(plan.expected_profit)],
+    ["Expected sold", `${number(plan.expected_sold)} of ${number(plan.order.meals)}`],
+    ["Chance of loss", percent(plan.p_loss)],
+    [
+      "Risk weight",
+      `${number(plan.risk_weight)} · ${number(plan.losing_streak)} losing in a row`,
+    ],
+  ];
+  summary.innerHTML = `<div class="agent-kpis">${kpis.map(([label, value]) => `<div class="last-kpi"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join("")}</div><p class="subtle-line">${open ? "" : "No order window is open; this is the last plan. "}Forecast for day ${esc(plan.day)}, not a result. Forecast bias ×${esc(plan.forecast_bias)}, noise ±${esc(percent(plan.forecast_noise))}. Planned in ${esc(plan.elapsed_ms)} ms.</p>`;
+  detail.hidden = false;
+  const chosen = plan.order?.spot;
+  $("agent-rows").innerHTML = (plan.alternatives || [])
+    .map(
+      (row) =>
+        `<tr class="${row.spot === chosen ? "selected" : ""}"><td>${esc(spotName(row.spot, rules))}</td><td>${esc(row.quality)} · ${esc(money(row.price))} × ${esc(number(row.meals))}</td><td>${esc(money(row.expected_profit))}</td><td>${esc(percent(row.p_loss))}</td><td>${esc(plan.rivals?.[row.spot]?.expected ?? "—")}</td></tr>`,
+    )
+    .join("") ||
+    '<tr><td colspan="5" class="empty-copy">No alternatives saved.</td></tr>';
+  const profiles = [...(plan.rival_profiles || [])].sort(
+    (a, b) => Number(b.chance || 0) - Number(a.chance || 0),
+  );
+  $("agent-rivals").innerHTML = profiles.length
+    ? profiles
+        .map(
+          (rival) =>
+            `<div class="agent-rival"><strong>${esc(rival.name)}</strong><span>${rival.most_likely ? `${esc(spotName(rival.most_likely, rules))} ${esc(percent(rival.chance))}` : "—"}</span><span>${esc(rival.quality)} · ${esc(money(rival.price))}</span></div>`,
+        )
+        .join("")
+    : '<p class="empty-copy">No rival predictions saved.</p>';
+  const checks = [...(plan.checks || [])].reverse();
+  $("agent-checks").innerHTML = checks.length
+    ? checks
+        .map(
+          (row) =>
+            `<tr><td>${esc(row.day)}</td><td>${esc(spotName(row.spot, rules))}</td><td>${esc(row.expected_sold == null ? "—" : Math.round(row.expected_sold))} / ${esc(number(row.actual_sold))}</td><td>${esc(money(row.expected_profit))} / ${esc(money(row.actual_profit))}</td><td>${esc(row.expected_rivals ?? "—")} / ${esc(row.actual_rivals ?? "—")}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="5" class="empty-copy">No checked days yet. The first one appears after a planned day finishes.</td></tr>';
+}
+
 function renderForecast(state) {
   const forecast = state?.forecast || {},
     rules = state?.rules || {},
@@ -368,6 +436,7 @@ function render(data) {
   current = data;
   renderStatus(data);
   renderOrder(data);
+  renderAgent(data);
   renderForecast(data.state);
   renderLastDay(data.state);
   renderPerformance(data);
