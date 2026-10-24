@@ -7,6 +7,7 @@ import importlib
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 import statistics
 import sys
@@ -132,6 +133,18 @@ def observe_state(agent, state, log):
         log.write("agent_error", stage="observe", error_type=type(error).__name__,
                   message=str(error)[:200])
         print("Agent observe failed: {}".format(error), file=sys.stderr, flush=True)
+
+
+def import_snapshot(folder):
+    """Start a fresh clone from the team's committed learning instead of from nothing."""
+    snapshot = Path(__file__).resolve().parent / "data"
+    if (folder / "agent-history.jsonl").exists() or not (snapshot / "agent-history.jsonl").exists():
+        return
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ("agent-history.jsonl", "agent-model.json"):
+        if (snapshot / name).exists():
+            shutil.copyfile(str(snapshot / name), str(folder / name))
+    print("Loaded the team's learned data from data/.", flush=True)
 
 
 def seed_agent(agent, log):
@@ -398,6 +411,8 @@ def main():
     log.write("run_started", mode="practice" if args.practice else "live", log_path=str(log.path))
     # Practice runs use house bots, so keep them out of the live history.
     spots = None if args.spots.strip().lower() == "all" else [s.strip() for s in args.spots.split(",") if s.strip()]
+    if not args.practice:
+        import_snapshot(log.path.parent)
     agent = Agent(log.path.parent, persist=not args.practice, spots=spots, settings_path=SETTINGS)
     if args.practice:
         practice(key, args.days, args.rivals, args.seed, log, agent)
