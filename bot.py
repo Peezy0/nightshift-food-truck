@@ -4,6 +4,7 @@
 import argparse
 import datetime
 import json
+import math
 import os
 from pathlib import Path
 import sys
@@ -90,7 +91,9 @@ def log_decision(log, state, order):
               crowd=(forecast.get("crowds") or {}).get(spot),
               weather=forecast.get("weather"), events=forecast.get("events"),
               reputation=((state.get("you") or {}).get("reputation") or {}).get(spot),
-              recent_rivals=len(rivals), recent_rival_prices=[truck.get("price") for truck in rivals])
+              recent_rivals=len(rivals), estimated_rivals=estimate_rivals(state, spot),
+              event_spot=any(event.get("spot") == spot for event in forecast.get("events") or []),
+              recent_rival_prices=[truck.get("price") for truck in rivals])
 
 
 def log_result(log, state):
@@ -123,13 +126,26 @@ def request(method, url, key, payload=None, timeout=30):
         return json.load(response)
 
 
+def estimate_rivals(state, spot):
+    """Allow for teams converging on the same announced event."""
+    previous = (state.get("last_day") or {}).get("spots") or {}
+    own_id = (state.get("you") or {}).get("id")
+    recent = sum(truck.get("id") != own_id for truck in
+                 (previous.get(spot) or {}).get("trucks") or [])
+    events = (state.get("forecast") or {}).get("events") or []
+    if not any(event.get("spot") == spot for event in events):
+        return recent
+    market_rivals = max(0, len(state.get("trucks") or []) - 1)
+    # A public concert forecast attracted five of six rivals in the live market.
+    # Estimate a majority, but never more rivals than the market contains.
+    return max(recent, math.ceil(market_rivals * 0.65))
+
+
 def decide(state):
     """Pick a spot with demand and little recent competition."""
     forecast = state.get("forecast") or {}
     expected = forecast.get("expected_customers") or {}
-    previous = (state.get("last_day") or {}).get("spots") or {}
     reputation = (state.get("you") or {}).get("reputation") or {}
-    events = forecast.get("events") or []
     rules = state.get("rules") or {}
     spots = rules.get("spots") or SPOTS
 
@@ -137,21 +153,18 @@ def decide(state):
     best_score = float("-inf")
     for spot in spots:
         customers = float(expected.get(spot) or 0)
-        recent_trucks = (previous.get(spot) or {}).get("trucks") or []
-        # Last day's rivals are only a hint; they may move tomorrow.
-        rivals = sum(1 for truck in recent_trucks if truck.get("id") != (state.get("you") or {}).get("id"))
+        # Last day's rivals are only a hint; public events draw teams in.
+        rivals = estimate_rivals(state, spot)
         loyal = float(reputation.get(spot, 50))
-        event_bonus = 1.08 if any(event.get("spot") == spot for event in events) else 1.0
-        score = customers * event_bonus * (0.75 + loyal / 200) / (1 + 0.7 * rivals)
+        score = customers * (0.75 + loyal / 200) / (1 + 0.7 * rivals)
         if score > best_score:
             best_score, best_spot = score, spot
 
     quality = "standard"
     price = max(float(rules.get("price_min", 1)), min(9.5, float(rules.get("price_max", 30))))
     # Unsold meals spoil. Estimate our share, then leave a modest buffer.
-    recent_rivals = sum(1 for truck in (previous.get(best_spot) or {}).get("trucks") or []
-                        if truck.get("id") != (state.get("you") or {}).get("id"))
-    likely_sales = float(expected.get(best_spot) or 60) / (1 + 1.2 * recent_rivals)
+    predicted_rivals = estimate_rivals(state, best_spot)
+    likely_sales = float(expected.get(best_spot) or 60) / (1 + 1.2 * predicted_rivals)
     cost = float((rules.get("costs") or {}).get(quality, QUALITY_COST[quality]))
     budget = float(rules.get("budget", 500))
     meals = min(int(budget // cost), max(15, round(likely_sales * 0.75)))
