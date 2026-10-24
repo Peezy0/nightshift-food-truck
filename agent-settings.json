@@ -1,5 +1,6 @@
 {
-  "_help": "The bot re-reads this file every night; no restart needed. Spots: oval, thompson, union, stadium, highst, northres.",
+  "_help": "The bot re-reads this file every night; no restart needed. Spots: oval, thompson, union, stadium, highst, northres (and the new ones as they open). vote: abstain, auto (default: abstain unless a vote clearly pays) or a candidate id.",
+  "vote": "auto",
   "spots": "all",
   "avoid": [],
   "prefer": {},
