@@ -71,7 +71,7 @@ def log_result(log, state):
               cash=(state.get("you") or {}).get("cash"), weather=last.get("weather"),
               customers=spot_data.get("customers"), hungry=spot_data.get("hungry"),
               rival_count=max(0, len(spot_data.get("trucks") or []) - (1 if spot else 0)),
-              missed=not bool(own))
+              missed=not bool(own.get("spot")))
 
 
 def request(method, url, key, payload=None, timeout=30):
@@ -139,6 +139,7 @@ def practice(key, days, rivals, seed, log):
 def live(key, log):
     version = 0
     seen_results = set()
+    connected = False
     while True:
         try:
             url = API + "/state"
@@ -146,6 +147,11 @@ def live(key, log):
                 url += "?since=" + str(version)
             state = request("GET", url, key, timeout=30)
             version = state.get("version") or 0
+            if not connected:
+                print("Connected: {} market {} day {} ({})".format(
+                    state.get("mode"), state.get("market"), state.get("day"),
+                    state.get("phase")), flush=True)
+                connected = True
             last = state.get("last_day") or {}
             result_id = (state.get("mode"), state.get("market"), last.get("day"))
             if last.get("day") is not None and result_id not in seen_results:
