@@ -28,6 +28,19 @@ python3 status.py
 
 `analyze.py` summarizes finished days. `status.py` explains the latest state captured by the running bot: version, mode, market and day, phase and server clock, order window, rules, forecast, your truck and current order, the entire last day's spot results, trucks, and announcements. It reads `logs/latest-state.json` locally and needs no truck key in the second terminal. `last_day` is the actual outcome; the forecast is for the *next* day. After the next day starts, run `status.py` again to see how the previous order performed.
 
+## Local dashboard
+
+For a browser view, leave `python3 bot.py` running in its first terminal. In a **second** VS Code terminal in this folder, run:
+
+```sh
+git pull
+python3 dashboard.py
+```
+
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765) on the same computer. The dashboard refreshes every five seconds and shows phase timing, your latest order and its food cost, forecast, the full previous day's results, market performance, rules, rivals, and announcements. It reads only local files in `logs/`; it does not need the truck key, send game API requests, or submit orders. The server listens only on your computer. `Ctrl+C` in the dashboard terminal stops the dashboard without stopping the bot.
+
+If it says no state snapshot exists, the running bot is an older version. After its current order is submitted, restart the bot with the latest code in its original terminal. If port 8765 is busy, run `python3 dashboard.py --port 8766` and open that port instead.
+
 For a practice run, pass its file path, for example `python3 analyze.py logs/practice-YYYYMMDDTHHMMSSZ-PID.jsonl`. Look for low sell-through (too much food), frequent stockouts (potential missed sales), low average profit by spot, API errors, and slow order submissions. Use the same `--seed` when comparing two versions of `decide(state)` so weather and events are comparable. Repeat across several seeds and rival counts; a single practice game is not a reliable score against real teams.
 
 To update a running clone, wait until its current nightly order has been submitted, press `Ctrl+C`, run `git pull`, then start `python3 bot.py` again in the same terminal. The key environment variable remains set in that terminal. Keep one live bot running for the truck.

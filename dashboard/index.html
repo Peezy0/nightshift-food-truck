@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#151a18" />
+    <title>Big Buck · Night Shift Dispatch</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="masthead">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">BB</span>
+          <div>
+            <p class="eyebrow">Food Truck Wars / Dispatch</p>
+            <h1>Big Buck</h1>
+          </div>
+        </div>
+        <div class="refresh">
+          <span id="refresh-dot" class="refresh-dot" aria-hidden="true"></span
+          ><span id="refresh-label">Connecting to local log…</span
+          ><span class="refresh-separator">·</span
+          ><span id="updated-at">—</span>
+        </div>
+      </header>
+
+      <main>
+        <div id="notice" class="notice" role="status" aria-live="polite">
+          Reading your bot’s local data…
+        </div>
+
+        <section class="command-bar" aria-label="Current game status">
+          <div class="command-main">
+            <span class="eyebrow">Game status</span>
+            <div class="phase-line">
+              <strong id="phase">—</strong
+              ><span id="phase-detail">Waiting for state</span>
+            </div>
+          </div>
+          <div class="command-cell">
+            <span class="eyebrow">Time to next phase</span
+            ><strong id="countdown">—</strong><small id="phase-end">—</small>
+          </div>
+          <div class="command-cell">
+            <span class="eyebrow">Market / day</span
+            ><strong id="progress">—</strong><small id="mode">—</small>
+          </div>
+          <div class="command-cell">
+            <span class="eyebrow">Truck cash</span><strong id="cash">—</strong
+            ><small id="standing">—</small>
+          </div>
+        </section>
+
+        <div class="content-grid">
+          <div class="primary-column">
+            <section
+              class="section order-section"
+              aria-labelledby="order-heading"
+            >
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">01 / Coming day</span>
+                  <h2 id="order-heading">Current order</h2>
+                </div>
+                <span id="order-badge" class="pill">Waiting</span>
+              </div>
+              <div id="order" class="order-content empty-copy">
+                The bot’s next order will appear here when it submits one.
+              </div>
+            </section>
+
+            <section class="section" aria-labelledby="forecast-heading">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">02 / Plan ahead</span>
+                  <h2 id="forecast-heading">Forecast</h2>
+                </div>
+                <span id="forecast-day" class="section-aside">—</span>
+              </div>
+              <div id="forecast-meta" class="forecast-meta empty-copy">
+                Waiting for forecast…
+              </div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Spot</th>
+                      <th scope="col">Expected</th>
+                      <th scope="col">Crowd</th>
+                      <th scope="col">Last rivals</th>
+                      <th scope="col">Your rep</th>
+                    </tr>
+                  </thead>
+                  <tbody id="forecast-rows">
+                    <tr>
+                      <td colspan="5" class="empty-copy">No forecast yet.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="section" aria-labelledby="last-heading">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">03 / Actual outcome</span>
+                  <h2 id="last-heading">Last completed day</h2>
+                </div>
+                <span id="last-day" class="section-aside">—</span>
+              </div>
+              <div id="last-summary" class="last-summary empty-copy">
+                Results will appear after a day ends.
+              </div>
+              <div id="last-meta" class="subtle-line"></div>
+              <div class="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Spot</th>
+                      <th scope="col">Customers</th>
+                      <th scope="col">Still hungry</th>
+                      <th scope="col">Trucks there</th>
+                    </tr>
+                  </thead>
+                  <tbody id="last-rows">
+                    <tr>
+                      <td colspan="4" class="empty-copy">
+                        No day results yet.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <details class="rivals-detail">
+                <summary>See every truck’s last-day orders and sales</summary>
+                <div id="rivals"></div>
+              </details>
+            </section>
+          </div>
+
+          <aside class="secondary-column" aria-label="Performance and rules">
+            <section
+              class="section performance"
+              aria-labelledby="performance-heading"
+            >
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">04 / This market</span>
+                  <h2 id="performance-heading">Performance</h2>
+                </div>
+              </div>
+              <div id="performance" class="empty-copy">
+                Waiting for completed days…
+              </div>
+            </section>
+            <section class="section" aria-labelledby="rules-heading">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">05 / Constraints</span>
+                  <h2 id="rules-heading">Rules</h2>
+                </div>
+              </div>
+              <div id="rules" class="empty-copy">Waiting for game rules…</div>
+            </section>
+            <section class="section" aria-labelledby="standings-heading">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">06 / Rivals</span>
+                  <h2 id="standings-heading">Market standings</h2>
+                </div>
+              </div>
+              <ol id="standings-list" class="standings-list">
+                <li class="empty-copy">Waiting for trucks…</li>
+              </ol>
+            </section>
+            <section class="section" aria-labelledby="news-heading">
+              <div class="section-heading">
+                <div>
+                  <span class="eyebrow">07 / Updates</span>
+                  <h2 id="news-heading">Announcements</h2>
+                </div>
+              </div>
+              <div id="announcements" class="empty-copy">
+                No announcements yet.
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+      <footer>
+        Local read-only view · Refreshes every 5 seconds · Bot and dashboard run
+        in separate terminals<br /><span id="state-details"
+          >State version — · Server time —</span
+        >
+      </footer>
+    </div>
+  </body>
+</html>
