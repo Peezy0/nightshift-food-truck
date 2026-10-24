@@ -1,16 +1,16 @@
 {
-  "observed_at": "2026-10-24T06:08:47.395742+00:00",
-  "version": 220,
+  "observed_at": "2026-10-24T06:11:40.930607+00:00",
+  "version": 221,
   "mode": "live",
   "market": 1,
   "markets": 1,
-  "day": 27,
+  "day": 28,
   "days": 65,
-  "phase": "night",
-  "phase_ends_at": "2026-10-24T06:10:00.000Z",
-  "server_time": "2026-10-24T06:08:47.354Z",
-  "orders_open": true,
-  "order_for_day": 28,
+  "phase": "day",
+  "phase_ends_at": "2026-10-24T06:15:00.000Z",
+  "server_time": "2026-10-24T06:11:40.849Z",
+  "orders_open": false,
+  "order_for_day": null,
   "rules": {
     "budget": 500,
     "costs": {
@@ -115,37 +115,29 @@
     "elections": true
   },
   "forecast": {
-    "day": 28,
+    "day": 29,
     "weather": {
-      "clear": 0.23,
-      "cloudy": 0.43,
-      "rain": 0.27,
-      "cold": 0.07
+      "clear": 0.16,
+      "cloudy": 0.37,
+      "rain": 0.36,
+      "cold": 0.11
     },
-    "events": [
-      {
-        "key": "gameday",
-        "name": "Game day vs Oregon",
-        "spot": "stadium",
-        "effect": "100,000 fans: a huge crowd at the Stadium and a busier campus everywhere",
-        "opponent": "Oregon"
-      }
-    ],
+    "events": [],
     "crowds": {
-      "oval": "high",
+      "oval": "medium",
       "thompson": "medium",
-      "union": "high",
-      "stadium": "high",
-      "highst": "high",
-      "northres": "medium"
+      "union": "medium",
+      "stadium": "low",
+      "highst": "medium",
+      "northres": "low"
     },
     "expected_customers": {
-      "oval": 183,
-      "thompson": 109,
-      "union": 178,
-      "stadium": 211,
-      "highst": 207,
-      "northres": 91
+      "oval": 106,
+      "thompson": 88,
+      "union": 115,
+      "stadium": 40,
+      "highst": 99,
+      "northres": 68
     }
   },
   "spot_info": {
@@ -196,21 +188,16 @@
     "id": "t_876b0a",
     "truck_name": "BIg Buck",
     "company_name": "BIgBuckLLC",
-    "cash": 4122.2,
+    "cash": 4411.46,
     "reputation": {
       "oval": 100,
-      "thompson": 58.95,
-      "union": 62.04,
+      "thompson": 58.68,
+      "union": 61.68,
       "stadium": 50,
-      "highst": 54.53,
-      "northres": 50.97
+      "highst": 54.39,
+      "northres": 50.94
     },
-    "order": {
-      "spot": "oval",
-      "price": 11.25,
-      "quality": "standard",
-      "meals": 133
-    },
+    "order": null,
     "last_spot": "oval",
     "staff": {
       "employees": 3,
@@ -262,22 +249,30 @@
     ]
   },
   "last_day": {
-    "day": 27,
-    "weather": "cloudy",
-    "events": [],
+    "day": 28,
+    "weather": "rain",
+    "events": [
+      {
+        "key": "gameday",
+        "name": "Game day vs Oregon",
+        "spot": "stadium",
+        "effect": "100,000 fans: a huge crowd at the Stadium and a busier campus everywhere",
+        "opponent": "Oregon"
+      }
+    ],
     "spots": {
       "oval": {
-        "customers": 141,
+        "customers": 118,
         "hungry": 49,
-        "walked_in": 0,
-        "walked_out": 9,
+        "walked_in": 5,
+        "walked_out": 7,
         "trucks": [
           {
             "id": "t_876b0a",
-            "price": 11,
-            "quality": "premium",
-            "meals": 83,
-            "sold": 83,
+            "price": 11.25,
+            "quality": "standard",
+            "meals": 133,
+            "sold": 67,
             "employees": 3,
             "truck_name": "BIg Buck",
             "color": "#5ec0e8"
@@ -285,17 +280,17 @@
         ]
       },
       "thompson": {
-        "customers": 106,
-        "hungry": 24,
-        "walked_in": 0,
+        "customers": 94,
+        "hungry": 40,
+        "walked_in": 1,
         "walked_out": 2,
         "trucks": [
           {
             "id": "t_d64e26",
-            "price": 9,
+            "price": 10.92,
             "quality": "standard",
-            "meals": 80,
-            "sold": 80,
+            "meals": 100,
+            "sold": 53,
             "employees": 2,
             "truck_name": "T.H.E Truck",
             "color": "#ff5a5f"
@@ -303,18 +298,17 @@
         ]
       },
       "union": {
-        "customers": 86,
-        "hungry": 19,
-        "walked_in": 2,
-        "walked_out": 1,
-        "free_food": 45,
+        "customers": 165,
+        "hungry": 70,
+        "walked_in": 0,
+        "walked_out": 5,
         "trucks": [
           {
             "id": "t_e2de7d",
-            "price": 10.25,
+            "price": 10.5,
             "quality": "premium",
-            "meals": 84,
-            "sold": 68,
+            "meals": 90,
+            "sold": 90,
             "employees": 4,
             "truck_name": "IBE",
             "color": "#8fd16a"
@@ -322,34 +316,45 @@
         ]
       },
       "stadium": {
-        "customers": 41,
-        "hungry": 36,
-        "walked_in": 0,
-        "walked_out": 5,
-        "trucks": []
+        "customers": 128,
+        "hungry": 35,
+        "walked_in": 5,
+        "walked_out": 1,
+        "trucks": [
+          {
+            "id": "t_5f2743",
+            "price": 9.49,
+            "quality": "standard",
+            "meals": 133,
+            "sold": 97,
+            "employees": 4,
+            "truck_name": "Cheapest Eats",
+            "color": "#ffd23f"
+          }
+        ]
       },
       "highst": {
-        "customers": 131,
-        "hungry": 49,
-        "walked_in": 15,
-        "walked_out": 0,
+        "customers": 185,
+        "hungry": 60,
+        "walked_in": 18,
+        "walked_out": 1,
         "trucks": [
           {
             "id": "t_96a96a",
             "price": 10,
             "quality": "premium",
             "meals": 90,
-            "sold": 56,
+            "sold": 90,
             "employees": 4,
             "truck_name": "Wagyu Express",
             "color": "#f2a93b"
           },
           {
             "id": "t_d0c136",
-            "price": 10.74,
+            "price": 10.5,
             "quality": "premium",
             "meals": 90,
-            "sold": 41,
+            "sold": 52,
             "employees": 4,
             "truck_name": "Frontrun Fries",
             "color": "#c08cff"
@@ -357,126 +362,51 @@
         ]
       },
       "northres": {
-        "customers": 86,
-        "hungry": 14,
-        "walked_in": 3,
-        "walked_out": 3,
-        "trucks": [
-          {
-            "id": "t_5f2743",
-            "price": 8.7,
-            "quality": "standard",
-            "meals": 72,
-            "sold": 72,
-            "employees": 4,
-            "truck_name": "Cheapest Eats",
-            "color": "#ffd23f"
-          }
-        ]
+        "customers": 98,
+        "hungry": 85,
+        "walked_in": 0,
+        "walked_out": 13,
+        "trucks": []
       }
     },
     "you": {
       "status": "played",
       "spot": "oval",
-      "price": 11,
-      "quality": "premium",
-      "meals": 83,
-      "sold": 83,
-      "revenue": 913,
-      "cost": 456.5,
-      "profit": 444.8,
-      "spoiled": 0,
-      "salvage": 0,
+      "price": 11.25,
+      "quality": "standard",
+      "meals": 133,
+      "sold": 67,
+      "revenue": 753.75,
+      "cost": 498.75,
+      "profit": 289.26,
+      "spoiled": 66,
+      "salvage": 61.88,
       "move_cost": 0,
       "employees": 3,
       "capacity": 150,
       "wages": 33,
       "taxes": 20,
-      "subsidies": 41.3,
+      "subsidies": 25.38,
       "fines": 0
     },
     "moments": [
       {
-        "kind": "election",
-        "spot": "union",
-        "title": "Chad Fisher, MBA wins the election",
-        "text": "2 of 4 truck votes. In office for 8 days: the flat fee and the North campus curfew.",
+        "kind": "game",
+        "spot": "stadium",
+        "title": "Ohio State 14, Oregon 10",
+        "text": "A win at the Shoe.",
         "center": {
-          "x": 440,
-          "z": 388
+          "x": -490,
+          "z": 48
         },
-        "radius": 120,
+        "radius": 200,
         "trucks": [],
         "data": {
-          "election": "e1",
-          "winner_id": "c1",
-          "winner_name": "Chad Fisher, MBA",
-          "tally": {
-            "c1": 2,
-            "c2": 0,
-            "c3": 2
-          },
-          "votes": {
-            "t_d64e26": "c1",
-            "t_5f2743": "c3",
-            "t_96a96a": "c3",
-            "t_876b0a": "c1"
-          },
-          "candidates": [
-            {
-              "id": "c1",
-              "name": "Chad Fisher, MBA"
-            },
-            {
-              "id": "c2",
-              "name": "Brock Lee"
-            },
-            {
-              "id": "c3",
-              "name": "Gov. Ina Grant"
-            }
-          ],
-          "policies": [
-            {
-              "key": "flat_fee",
-              "text": "Flat fee: every truck that opens pays $20, and earns a 10% bonus on revenue above $500 a day",
-              "params": {
-                "revenue_share": 0.1,
-                "above": 500,
-                "flat": -20
-              }
-            },
-            {
-              "key": "curfew",
-              "text": "North campus curfew: High Street and North Res crowds x 0.75; the Oval, Thompson and the Union x 1.1",
-              "params": {
-                "crowd": {
-                  "highst": 0.75,
-                  "northres": 0.75,
-                  "oval": 1.1,
-                  "thompson": 1.1,
-                  "union": 1.1
-                }
-              }
-            }
-          ]
-        }
-      },
-      {
-        "kind": "giveaway",
-        "spot": "union",
-        "title": "Free food at Ohio Union",
-        "text": "The Ballroom Dance Club set up next to the trucks. 34% of the customers there took free food instead.",
-        "center": {
-          "x": 440,
-          "z": 388
-        },
-        "radius": 80,
-        "trucks": [],
-        "data": {
-          "club": "the Ballroom Dance Club",
-          "share": 0.34,
-          "count": 45
+          "opponent": "Oregon",
+          "us": 14,
+          "them": 10,
+          "won": true,
+          "championship": false
         }
       }
     ],
@@ -488,8 +418,8 @@
       "truck_name": "IBE",
       "company_name": "Jolly",
       "color": "#8fd16a",
-      "cash": 6182.96,
-      "reputation_avg": 61.4,
+      "cash": 6633.46,
+      "reputation_avg": 61.3,
       "employees": 4,
       "wage": 6,
       "badge": null
@@ -499,8 +429,8 @@
       "truck_name": "BIg Buck",
       "company_name": "BIgBuckLLC",
       "color": "#5ec0e8",
-      "cash": 4122.2,
-      "reputation_avg": 62.7,
+      "cash": 4411.46,
+      "reputation_avg": 62.6,
       "employees": 3,
       "wage": 11,
       "badge": null
@@ -510,7 +440,7 @@
       "truck_name": "Cheapest Eats",
       "company_name": "Burgers & Fries",
       "color": "#ffd23f",
-      "cash": 3461.47,
+      "cash": 3905.05,
       "reputation_avg": 61.4,
       "employees": 4,
       "wage": 6,
@@ -521,8 +451,8 @@
       "truck_name": "Wagyu Express",
       "company_name": "Oriental Dishes",
       "color": "#f2a93b",
-      "cash": 3094.44,
-      "reputation_avg": 60.9,
+      "cash": 3495.44,
+      "reputation_avg": 60.8,
       "employees": 4,
       "wage": 6,
       "badge": null
@@ -532,8 +462,8 @@
       "truck_name": "Frontrun Fries",
       "company_name": "Tres Hermanos",
       "color": "#c08cff",
-      "cash": 1622.69,
-      "reputation_avg": 60.6,
+      "cash": 1670.54,
+      "reputation_avg": 60.5,
       "employees": 4,
       "wage": 10,
       "badge": null
@@ -543,8 +473,8 @@
       "truck_name": "T.H.E Truck",
       "company_name": "Truck Home Eats",
       "color": "#ff5a5f",
-      "cash": 1378.66,
-      "reputation_avg": 61.8,
+      "cash": 1601.36,
+      "reputation_avg": 61.7,
       "employees": 2,
       "wage": 6.5,
       "badge": null
@@ -639,6 +569,20 @@
   },
   "announcements": [
     {
+      "at": "2026-10-24T06:10:00.061Z",
+      "day": 28,
+      "kind": "game",
+      "text": "Ohio State 14, Oregon 10. A win at the Shoe.",
+      "title": "Final score",
+      "spot": "stadium"
+    },
+    {
+      "at": "2026-10-24T06:10:00.061Z",
+      "day": 28,
+      "kind": "day",
+      "text": "Day 28: IBE made $451 at Ohio Union."
+    },
+    {
       "at": "2026-10-24T06:00:00.058Z",
       "day": 28,
       "kind": "event",
@@ -723,18 +667,6 @@
       "day": 23,
       "kind": "day",
       "text": "Day 23: Frontrun Fries made $478 at High Street."
-    },
-    {
-      "at": "2026-10-24T05:10:00.226Z",
-      "day": 23,
-      "kind": "event",
-      "text": "Tomorrow: Late-night rush. After the bars close, High Street and North Res are hungry and the rest of campus is asleep."
-    },
-    {
-      "at": "2026-10-24T05:10:00.226Z",
-      "day": 22,
-      "kind": "day",
-      "text": "Day 22: Frontrun Fries made $379 at High Street."
     }
   ]
 }
