@@ -8,6 +8,7 @@ Output goes to logs/bot.out. Python 3.8+, standard library only.
 import datetime
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
@@ -46,6 +47,9 @@ def stamps():
 
 def start(key):
     env = dict(os.environ, NIGHTSHIFT_KEY=key, PYTHONUNBUFFERED="1")
+    if not env.get("SSL_CERT_FILE") and Path("/etc/ssl/cert.pem").exists():
+        # python.org builds on macOS ship without CA certificates; use the system bundle.
+        env["SSL_CERT_FILE"] = "/etc/ssl/cert.pem"
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     output = OUTPUT.open("a", encoding="utf-8")
     process = subprocess.Popen([sys.executable, str(ROOT / "bot.py")], cwd=str(ROOT), env=env,
@@ -69,6 +73,8 @@ def main():
         sys.exit("Set NIGHTSHIFT_KEY or put the key in {}".format(KEY_FILE))
     PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+    # `kill <watchdog pid>` must stop the bot too, never leave a second bot running.
+    signal.signal(signal.SIGTERM, lambda signum, frame: (_ for _ in ()).throw(KeyboardInterrupt()))
     watched = stamps()
     process = start(key)
     failures = 0
