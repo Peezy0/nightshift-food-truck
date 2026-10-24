@@ -1,4 +1,4 @@
-# Blg Buck — Food Truck Wars
+# Big Buck — Food Truck Wars
 
 Bot for the Builders Night Shift Food Truck Wars challenge. Python 3.8 or newer; no third-party packages.
 
@@ -13,7 +13,7 @@ python3 bot.py
 
 The first command runs a private 30-day practice game. The second stays connected to the live game and the final. Leave it running. If you edit the strategy, restart the bot. Use `--seed same-name` for comparable practice runs.
 
-The bot reads the forecast, estimates competition from the previous day, chooses a spot, and orders 133 standard meals at $10.75. The strategy is deliberately simple; improve `decide(state)` based on practice results and live rivals. Each nightly order can be replaced until the night ends.
+The bot reads the forecast, estimates competition from the previous day, chooses a spot, and orders standard meals at $9.50. It limits production because unsold meals still cost money. Improve `decide(state)` based on practice results and live rivals. Each nightly order can be replaced until the night ends.
 
 ## Important timing
 

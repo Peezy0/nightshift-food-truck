@@ -47,9 +47,12 @@ def decide(state):
             best_score, best_spot = score, spot
 
     quality = "standard"
-    price = 10.75
-    # Standard food builds reputation while allowing 133 meals on the daily budget.
-    meals = min(133, int(500 // QUALITY_COST[quality]))
+    price = 9.5
+    # Unsold meals spoil. Estimate our share, then leave a modest buffer.
+    recent_rivals = sum(1 for truck in (previous.get(best_spot) or {}).get("trucks") or []
+                        if truck.get("id") != (state.get("you") or {}).get("id"))
+    likely_sales = float(expected.get(best_spot) or 60) / (1 + 1.2 * recent_rivals)
+    meals = min(int(500 // QUALITY_COST[quality]), max(15, round(likely_sales * 0.75)))
     return {"spot": best_spot, "price": price, "quality": quality, "meals": meals}
 
 
