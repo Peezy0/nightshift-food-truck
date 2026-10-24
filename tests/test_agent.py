@@ -1,12 +1,16 @@
 """Checks for the profit agent and its fallback in the bot."""
 
+import copy
 import json
 from pathlib import Path
+import random
 import tempfile
+import time
 import unittest
 
+import agent as agent_module
 from agent import Agent, population, rep_factor, simulate_spot
-from bot import EventLog, choose_order, decide
+from bot import EventLog, choose_order, decide, maybe_vote, valid_order
 
 SPOTS = ["oval", "thompson", "union", "stadium", "highst", "northres"]
 RULES = {"budget": 500, "costs": {"cheap": 2.5, "standard": 3.75, "premium": 5.5},
@@ -322,6 +326,337 @@ class ChooseOrderTests(unittest.TestCase):
         agent = Agent(self.log.path.parent, persist=False)
         order, report = choose_order(agent, self.state, self.log)
         self.assertEqual(order, report["order"])
+
+
+FUZZ_RUNS = 60
+ALL_FEATURES = {"fair_choice": True, "walk_over": True, "salvage": True, "food": True, "moving_costs": True,
+                "new_spots": True, "surprises": True, "football": True, "riots": True, "coupons": True,
+                "staff": True, "planned_counts": True, "elections": True}
+NEW_SPOTS = ["fisher", "kottman", "mirror", "medcenter", "lane", "rpac", "schott", "gateway"]
+POSITIONS = {"oval": (100, 70), "thompson": (-12, 140), "union": (440, 388), "stadium": (-490, 48),
+             "highst": (463, -186), "northres": (170, -478), "fisher": (-90, -456), "kottman": (-300, 200),
+             "mirror": (250, 300), "medcenter": (50, 900), "lane": (0, -600), "rpac": (700, 500),
+             "schott": (-600, -300), "gateway": (300, 1100)}
+
+
+def policy(key, params=None, text=None):
+    return {"key": key, "text": text or key, "params": params or {}}
+
+
+def full_state(spots=None, **features):
+    """A night with every new rule live and every new field present, for 14 open spots by default."""
+    spots = spots or SPOTS + NEW_SPOTS
+    state = make_state(5, {spot: 90 + 7 * i for i, spot in enumerate(spots)})
+    state["rules"] = dict(RULES, spots=spots, foods=["meat", "veggie"], staff={"meals_per_employee": 50},
+                          coupons={"cost": 20}, spot_names={s: s for s in spots},
+                          move_costs={a: {b: 2 + abs(hash(a + b)) % 9 for b in spots if b != a} for a in spots})
+    state["features"] = dict(ALL_FEATURES, **features)
+    state["spot_info"] = {s: {"name": s, "x": POSITIONS[s][0], "z": POSITIONS[s][1], "region": "core",
+                              "opened_day": 1} for s in spots}
+    state["forecast"].update(
+        crowds={s: "medium" for s in spots}, new_spots=[],
+        diets={s: {"any": 0.7, "meat": 0.2, "veggie": 0.1} for s in spots},
+        planned={s: 1 for s in spots[:5]},
+        events=[{"key": "gameday", "name": "Game day vs Michigan", "opponent": "Michigan", "spot": "stadium",
+                 "effect": "Riot warning: if Ohio State loses, fans riot on High Street"}])
+    state["you"].update(
+        reputation={s: 50 for s in spots}, last_spot="oval", vote="c2", wrecked_until_day=None,
+        staff={"employees": 3, "target": 3, "wage": 11, "capacity": 150, "idle_days": 0},
+        coupons=[{"day": 4, "applied_day": None}], coupons_dropped=[], news=[{"day": 4, "kind": "spot", "text": "x"}])
+    state["labor"] = {"unemployed": 12, "lowest_asking_wage": 4, "median_asking_wage": 5.6}
+    for truck in state["trucks"]:
+        truck.update(employees=4, wage=6, cash=100, badge=None)
+    state["politics"] = {
+        "office": {"holder": {"id": "c1", "name": "Dean", "policies": [policy("price_cap", {"max_price": 12})]},
+                   "since_day": 1, "until_day": 9, "crisis": False, "crisis_day": None},
+        "election": {"id": "e2", "vote_day": 8, "nights_left": 2, "tally": {"c1": 1},
+                     "votes": {"r1": "c1"},
+                     "candidates": [{"id": "c1", "name": "A", "policies": [policy("meat_tax")]},
+                                    {"id": "c2", "name": "B", "policies": [policy("veggie_tax")]},
+                                    {"id": "c3", "name": "C", "policies": [policy("meat_tax"), policy("price_floor")]}]},
+        "laws": [policy("price_cap", {"max_price": 12}), policy("luxury_tax", {"per_meal": {"premium": 0.5, "cheap": -0.5}})],
+        "next_vote_day": 8, "history": []}
+    state["last_day"] = {"day": 5, "weather": "clear", "events": [], "you": {"status": "played"},
+                         "spots": crowd({"oval": RIVALS}),
+                         "moments": [{"kind": "giveaway", "spot": "thompson", "trucks": [], "data": {}}],
+                         "labor": [{"from": "r1", "to": "me", "count": 1, "wage": 12}]}
+    for spot in spots:
+        state["last_day"]["spots"].setdefault(spot, {"customers": 90, "hungry": 20, "trucks": []})
+    return state
+
+
+class NewRuleTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.agent = Agent(self.folder.name, persist=False)
+        for day in (1, 2, 3):
+            self.agent.observe(make_state(day, {spot: 100 for spot in SPOTS}, crowd({"oval": RIVALS})))
+
+    def state(self, **features):
+        state = make_state(3, {spot: 100 for spot in SPOTS}, crowd({"oval": RIVALS}))
+        state["features"] = dict({"fair_choice": True, "walk_over": True, "salvage": True}, **features)
+        return state
+
+    def test_staff_caps_meals_and_wages_count(self):
+        state = self.state(staff=True)
+        state["you"]["staff"] = {"employees": 1, "target": 1, "wage": 11, "capacity": 50, "idle_days": 0}
+        state["labor"] = {"unemployed": 5}
+        order, report = self.agent.plan(state)
+        self.assertLessEqual(order["meals"], 50)
+        self.assertEqual(report["staff"]["capacity"], 50)
+        self.assertTrue(any("capacity" in w for w in report["warnings"]))
+        free = self.agent.plan(self.state())[1]
+        state["you"]["staff"].update(employees=3, target=3, capacity=150, wage=30)
+        paid = self.agent.plan(state)[1]
+        self.assertAlmostEqual(free["expected_profit"] - paid["expected_profit"], 90.0, delta=1.0)
+        self.assertEqual(paid["staff"]["wages"], 90.0)
+
+    def test_skips_a_day_that_cannot_cover_wages_but_never_two_in_a_row(self):
+        state = self.state(staff=True)
+        state["you"]["staff"] = {"employees": 10, "target": 10, "wage": 60, "capacity": 500, "idle_days": 0}
+        state["labor"] = {"unemployed": 5}
+        order, report = self.agent.plan(state)
+        self.assertTrue(report["skip"])
+        self.assertIsNone(choose_order(self.agent, state)[0])
+        state["you"]["staff"]["idle_days"] = 1  # a second day with no order would cost the crew
+        order, report = self.agent.plan(state)
+        self.assertFalse(report["skip"])
+        self.assertGreater(order["meals"], 0)
+
+    def test_no_staff_sends_a_zero_meal_order(self):
+        state = self.state(staff=True)
+        state["you"]["staff"] = {"employees": 0, "target": 0, "wage": 11, "capacity": 0, "idle_days": 0}
+        order, report = self.agent.plan(state)
+        self.assertEqual(order["meals"], 0)
+        self.assertTrue(any("no staff" in w for w in report["warnings"]))
+
+    def test_price_cap_and_luxury_tax(self):
+        state = self.state(elections=True)
+        free = self.agent.plan(state)[1]
+        state["politics"] = {"laws": [policy("price_cap", {"max_price": 8})]}
+        order, report = self.agent.plan(state)
+        self.assertLessEqual(order["price"], 8.0)
+        self.assertLess(report["expected_profit"], free["expected_profit"])
+        state["politics"] = {"laws": [policy("luxury_tax", {"per_meal": {"premium": 0.5, "cheap": -0.5}})]}
+        taxed, report = self.agent.plan(state)
+        premium_free = [a for a in free["alternatives"] if a["quality"] == "premium"]
+        premium_taxed = [a for a in report["alternatives"] if a["quality"] == "premium"]
+        if premium_free and premium_taxed:
+            self.assertLess(max(a["expected_profit"] for a in premium_taxed),
+                            max(a["expected_profit"] for a in premium_free))
+        self.assertIn("luxury_tax", report["politics"]["laws"])
+
+    def test_law_policy_reads_params_and_falls_back_to_published_numbers(self):
+        pol = agent_module.law_policy([policy("price_floor", {"min_price": 9}), policy("junk_food_tax"),
+                                       policy("tax_the_top"), policy("curfew")])
+        self.assertEqual(pol["floor"], 9.0)
+        self.assertEqual(agent_module.charged_price(7.0, pol), 9.0)
+        self.assertEqual(pol["tax_quality"], {"cheap": 0.5, "premium": -0.5})
+        self.assertEqual(pol["top"], (500.0, 0.1))
+        self.assertEqual(pol["fixed"], -20.0)
+        self.assertEqual(agent_module.crowd_mult(pol, "highst"), 0.75)
+        self.assertEqual(agent_module.crowd_mult(pol, "oval"), 1.1)
+
+    def election(self, candidates, votes=None, tally=None, trucks=None):
+        state = self.state(elections=True)
+        state["politics"] = {"office": None, "laws": [], "election": {
+            "id": "e{}".format(len(candidates)) + str(random.random()), "vote_day": 8, "nights_left": 2,
+            "candidates": [{"id": cid, "name": cid, "policies": pols} for cid, pols in candidates],
+            "tally": tally or {}, "votes": votes or {}}}
+        if trucks:
+            state["trucks"] = state["trucks"][:trucks]
+        return state
+
+    def test_vote_abstains_when_gains_are_small(self):
+        state = self.election([("c1", [policy("curfew")]), ("c2", [policy("quiet_core")]), ("c3", [])])
+        decision = self.agent.vote_decision(state)
+        self.assertIsNone(decision["choice"])
+        self.assertIn("abstain", decision["reason"])
+        self.assertEqual(len(decision["candidates"]), 3)
+
+    def test_vote_goes_to_a_clearly_better_candidate(self):
+        rebate = [policy("luxury_tax", {"per_meal": {"premium": -3.0, "cheap": 3.0}})]
+        state = self.election([("c1", rebate), ("c2", []), ("c3", [])], trucks=2)
+        decision = self.agent.vote_decision(state)
+        self.assertEqual(decision["choice"], "c1")
+        # The team can override: abstain, or a named candidate.
+        path = Path(self.folder.name) / "settings.json"
+        for setting, expected in (("abstain", None), ("c3", "c3")):
+            path.write_text(json.dumps({"vote": setting}))
+            tuned = Agent(self.folder.name, persist=False, settings_path=path)
+            self.assertEqual(tuned.vote_decision(state)["choice"], expected)
+
+    def test_bot_votes_only_when_the_desired_vote_differs(self):
+        rebate = [policy("luxury_tax", {"per_meal": {"premium": -3.0, "cheap": 3.0}})]
+        state = self.election([("c1", rebate), ("c2", []), ("c3", [])], trucks=2)
+        log = EventLog(Path(self.folder.name) / "live.jsonl")
+        sent, voted = [], {}
+        maybe_vote(self.agent, state, log, lambda body: sent.append(body) or {"ok": True}, voted)
+        maybe_vote(self.agent, state, log, lambda body: sent.append(body) or {"ok": True}, voted)
+        self.assertEqual(sent, [{"candidate": "c1"}])
+        state["you"]["vote"] = "c1"
+        maybe_vote(self.agent, state, log, lambda body: sent.append(body) or {"ok": True}, {})
+        self.assertEqual(len(sent), 1)
+
+        def failing(body):
+            raise OSError("down")
+
+        maybe_vote(self.agent, state, log, failing, {})  # a failing vote never raises
+
+    def test_planned_counts_shift_the_lineup(self):
+        state = self.state(planned_counts=True)
+        none = self.agent.plan(state)[1]
+        # All three rivals have already ordered for Thompson: the Oval is theirs to leave alone.
+        state["forecast"]["planned"] = {spot: 0 for spot in SPOTS}
+        state["forecast"]["planned"]["thompson"] = 3
+        elsewhere = self.agent.plan(state)[1]
+        profit = lambda report, spot: [a for a in report["alternatives"] if a["spot"] == spot][0]["expected_profit"]
+        self.assertAlmostEqual(elsewhere["rivals"]["thompson"]["expected"], 3.0, delta=0.15)
+        self.assertAlmostEqual(elsewhere["rivals"]["oval"]["expected"], 0.0, delta=0.15)
+        self.assertGreater(profit(elsewhere, "oval"), profit(none, "oval"))
+        self.assertLess(profit(elsewhere, "thompson"), profit(none, "thompson"))
+        # Our own order is in the count and is not a rival.
+        state["you"]["order"] = {"spot": "thompson", "price": 9, "quality": "standard", "meals": 50}
+        self.assertAlmostEqual(self.agent.plan(state)[1]["rivals"]["thompson"]["expected"], 2.0, delta=0.15)
+
+    def test_new_spot_has_priors_and_dynamic_positions(self):
+        state = self.state(new_spots=True)
+        state["rules"] = dict(RULES, spots=SPOTS + ["fisher", "medcenter"])
+        state["forecast"]["expected_customers"].update(fisher=200, medcenter=60)
+        state["spot_info"] = {"fisher": {"x": -90, "z": -456}, "medcenter": {"x": 50, "z": 900},
+                              "oval": {"x": 100, "z": 70}}
+        order, report = self.agent.plan(state)
+        self.assertEqual(report["rivals"]["fisher"]["customer_limit"], 14.0)
+        self.assertIn("medcenter", report["rivals"])
+        metres = agent_module.make_distance(agent_module.Agent._clean_state(state)["spot_positions"])
+        self.assertAlmostEqual(metres("oval", "fisher"), 559.2, delta=1)
+        self.assertEqual(metres("oval", "thompson"), 130)  # no positions: published table
+        self.assertEqual(order["spot"], "fisher")
+
+    def test_move_cost_keeps_a_marginal_move_home(self):
+        state = self.state(moving_costs=True)
+        state["you"]["last_spot"] = "oval"
+        state["rules"] = dict(RULES, move_costs={"oval": {s: 40 for s in SPOTS if s != "oval"}})
+        report = self.agent.plan(state)[1]
+        by_spot = {a["spot"]: a for a in report["alternatives"]}
+        self.assertEqual(by_spot["oval"]["move_cost"], 0)
+        self.assertEqual(by_spot["union"]["move_cost"], 40.0)
+        free = self.agent.plan(self.state())[1]
+        free_by = {a["spot"]: a["expected_profit"] for a in free["alternatives"]}
+        self.assertAlmostEqual(free_by["union"] - by_spot["union"]["expected_profit"], 40.0, delta=1.0)
+        # First day out (no last spot) is free.
+        state["you"]["last_spot"] = None
+        self.assertEqual({a["move_cost"] for a in self.agent.plan(state)[1]["alternatives"]}, {0.0})
+
+    def test_meat_or_veggie_follows_the_diets(self):
+        state = self.state(food=True)
+        state["rules"] = dict(RULES, foods=["meat", "veggie"])
+        state["forecast"]["diets"] = {s: {"any": 0.3, "meat": 0.1, "veggie": 0.6} for s in SPOTS}
+        self.assertEqual(self.agent.plan(state)[0]["food"], "veggie")
+        state["forecast"]["diets"] = {s: {"any": 0.3, "meat": 0.6, "veggie": 0.1} for s in SPOTS}
+        self.assertEqual(self.agent.plan(state)[0]["food"], "meat")
+        state["features"]["food"] = False
+        self.assertNotIn("food", self.agent.plan(state)[0])
+        self.assertFalse(valid_order({"spot": "oval", "price": 9, "quality": "standard", "meals": 5, "food": "fish"},
+                                     dict(RULES, foods=["meat", "veggie"])))
+
+    def test_riot_warning_steers_away_from_the_riot(self):
+        state = self.state(riots=True, football=True)
+        state["spot_info"] = {s: {"x": POSITIONS[s][0], "z": POSITIONS[s][1]} for s in SPOTS}
+        state["forecast"]["events"] = [{"key": "gameday", "name": "Game day vs Michigan", "opponent": "Michigan",
+                                        "spot": "stadium", "effect": "Riot warning: fans riot on High Street if we lose"}]
+        report = self.agent.plan(state)[1]
+        cost = {a["spot"]: a["riot_cost"] for a in report["alternatives"]}
+        self.assertEqual(max(cost, key=cost.get), "highst")
+        self.assertGreater(cost["highst"], 5 * cost["union"])
+        self.assertTrue(any("riot" in w for w in report["warnings"]))
+
+    def test_coupons_cost_revenue_and_are_never_dropped(self):
+        state = self.state(coupons=True)
+        free = self.agent.plan(state)[1]
+        state["you"]["coupons"] = [{"day": 3, "applied_day": None}]
+        report = self.agent.plan(state)[1]
+        self.assertLess(report["expected_profit"], free["expected_profit"])
+        self.assertEqual(report["coupons_unused"], 1)
+        source = Path(agent_module.__file__).read_text() + (Path(agent_module.__file__).with_name("bot.py").read_text())
+        self.assertNotIn("/coupons", source)  # we never drop coupons on anyone
+
+    def test_day_23_late_night_rush_with_rain_and_wages(self):
+        # Live day 23: rain hit the Oval (26 customers of a forecast 50) and wages made a thin day a loss.
+        state = self.state(staff=True, moving_costs=True)
+        state["forecast"]["expected_customers"] = {"oval": 50, "thompson": 37, "union": 48, "stadium": 20,
+                                                   "highst": 237, "northres": 142}
+        state["forecast"]["events"] = [{"key": "latenight", "name": "Late-night rush", "spot": "highst"}]
+        state["forecast"]["weather"] = {"clear": 0.61, "cloudy": 0.27, "rain": 0.12}
+        state["you"]["staff"] = {"employees": 3, "target": 3, "wage": 11, "capacity": 150, "idle_days": 0}
+        state["you"]["last_spot"] = "oval"
+        state["labor"] = {"unemployed": 10}
+        state["rules"] = dict(RULES, move_costs={"oval": {s: 6 for s in SPOTS if s != "oval"}})
+        order, report = self.agent.plan(state)
+        # The event is already in the forecast counts: they are used as given, not scaled again.
+        self.assertEqual({a["spot"]: a["forecast"] for a in report["alternatives"]}["highst"], 237.0)
+        self.assertEqual(report["staff"]["wages"], 33.0)
+        by_spot = {a["spot"]: a for a in report["alternatives"]}
+        self.assertLess(by_spot["oval"]["expected_profit"], 0.2 * by_spot["highst"]["expected_profit"])
+        self.assertIn(order["spot"], ("highst", "northres"))
+        # More rain at the outdoor Oval means fewer meals there.
+        state["forecast"]["weather"] = {"clear": 0.1, "cloudy": 0.1, "rain": 0.8}
+        rainy = {a["spot"]: a for a in self.agent.plan(state)[1]["alternatives"]}
+        self.assertLess(rainy["oval"]["expected_profit"], by_spot["oval"]["expected_profit"])
+
+    def test_every_new_field_present(self):
+        state = full_state()
+        self.assertTrue(self.agent.observe(state))
+        started = time.monotonic()
+        order, report = self.agent.plan(state)
+        self.assertLess(time.monotonic() - started, 0.3)
+        self.assertTrue(valid_order(order, state["rules"]))
+        self.assertIn(order["food"], ("meat", "veggie"))
+        self.assertEqual(report["staff"]["capacity"], 150)
+        self.assertIn("price_cap", report["politics"]["laws"])
+        self.assertEqual(report["politics"]["election"], "e2")
+        self.assertIn("coupon", " ".join(report["warnings"]))
+        self.assertIsNotNone(self.agent.vote_decision(state)["reason"])
+
+    def test_fuzzed_states_never_raise(self):
+        rng = random.Random(11)
+        junk = [None, "x", -5, 1e12, [], {}, [1, "a"], {"a": None}, float("nan"), True, "$9.5"]
+
+        def mutate(node, depth=0):
+            if isinstance(node, dict):
+                for key in list(node):
+                    roll = rng.random()
+                    if roll < 0.06:
+                        node[key] = rng.choice(junk)
+                    elif roll < 0.1:
+                        del node[key]
+                    else:
+                        mutate(node[key], depth + 1)
+            elif isinstance(node, list):
+                for index in range(len(node)):
+                    if rng.random() < 0.06:
+                        node[index] = rng.choice(junk)
+                    else:
+                        mutate(node[index], depth + 1)
+
+        template = full_state()
+        for _ in range(FUZZ_RUNS):
+            state = copy.deepcopy(template)
+            mutate(state)
+            agent = Agent(self.folder.name, persist=False)
+            agent.observe(state)
+            try:
+                order, report = agent.plan(state)
+                agent.vote_decision(state)
+            except Exception as error:  # report which mutation broke it
+                self.fail("plan or vote raised {!r} on {}".format(error, json.dumps(state, default=str)[:300]))
+            if order is not None:
+                self.assertIn(order["quality"], QUALITIES_ALL)
+                self.assertIsInstance(order["meals"], int)
+
+
+QUALITIES_ALL = ("cheap", "standard", "premium")
 
 
 if __name__ == "__main__":

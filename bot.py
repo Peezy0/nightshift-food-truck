@@ -67,13 +67,18 @@ class EventLog:
             "rules": state.get("rules"),
             "features": state.get("features"),
             "forecast": state.get("forecast"),
+            "spot_info": state.get("spot_info"),
             "you": {field: you.get(field) for field in
-                    ("id", "truck_name", "company_name", "cash", "reputation", "order")},
+                    ("id", "truck_name", "company_name", "cash", "reputation", "order", "last_spot", "staff",
+                     "coupons", "coupons_dropped", "wrecked_until_day", "vote", "news")},
             "last_day": {field: last.get(field) for field in
-                         ("day", "weather", "events", "spots", "you")},
+                         ("day", "weather", "events", "spots", "you", "moments", "labor")},
             "trucks": [{field: truck.get(field) for field in
-                        ("id", "truck_name", "company_name", "color", "cash", "reputation_avg")}
+                        ("id", "truck_name", "company_name", "color", "cash", "reputation_avg", "employees",
+                         "wage", "badge")}
                        for truck in state.get("trucks") or []],
+            "labor": state.get("labor"),
+            "politics": state.get("politics"),
             "announcements": state.get("announcements") or [],
         }
         destination = self.path.parent / "latest-state.json"
@@ -97,6 +102,8 @@ def valid_order(order, rules):
         costs = rules.get("costs") or QUALITY_COST
         meals = order["meals"]
         price = float(order["price"])
+        if "food" in order and order["food"] not in (rules.get("foods") or ("meat", "veggie")):
+            return False
         return (order["spot"] in (rules.get("spots") or SPOTS)
                 and order["quality"] in qualities
                 and float(rules.get("price_min", 1)) <= price <= float(rules.get("price_max", 30))
@@ -110,9 +117,12 @@ def valid_order(order, rules):
 def choose_order(agent, state, log=None):
     """Ask the profit agent for an order; fall back to the heuristic on any failure.
 
-    Returns (order, report). The report is None when the heuristic made the choice."""
+    Returns (order, report). The report is None when the heuristic made the choice; the order is None
+    when the agent decided to skip the day."""
     try:
         order, report = agent.plan(state)
+        if report and report.get("skip"):
+            return None, report  # a day that cannot cover its wages: send nothing (never two in a row)
         if order is None:
             return decide(state), None
         if not valid_order(order, state.get("rules") or {}):
@@ -262,17 +272,77 @@ def decide(state):
     return {"spot": best_spot, "price": price, "quality": quality, "meals": meals}
 
 
+VOTE_TRIES = 3
+LATE_SECONDS = 45   # re-plan with the latest planned counts this close to the end of the night
+
+
+def maybe_vote(agent, state, log, post, voted):
+    """Cast the agent's vote once per campaign (or when it changes). Never raises, never retries for long.
+
+    `post` sends {"candidate": id}. Called after the order is in, so a slow or failing vote cannot cost a night."""
+    try:
+        election = (state.get("politics") or {}).get("election")
+        if not election or not (state.get("features") or {}).get("elections") or not hasattr(agent, "vote_decision"):
+            return
+        decision = agent.vote_decision(state, time_limit=0.3 if state.get("mode") == "final" else 0.6)
+        choice = decision.get("choice")
+        key = (state.get("mode"), state.get("market"), election.get("id"))
+        record = voted.setdefault(key, {"tries": 0, "choice": None, "logged": None})
+        if record["logged"] != (choice, decision.get("reason")):
+            record["logged"] = (choice, decision.get("reason"))
+            log.write("vote_decision", mode=state.get("mode"), market=state.get("market"),
+                      election=election.get("id"), choice=choice, reason=decision.get("reason"),
+                      current=(state.get("you") or {}).get("vote"), candidates=decision.get("candidates"))
+            print("Vote: {} ({})".format(choice or "abstain", decision.get("reason")), flush=True)
+        if choice is None or choice == (state.get("you") or {}).get("vote") or record["choice"] == choice \
+                or record["tries"] >= VOTE_TRIES:
+            return
+        record["tries"] += 1
+        response = post({"candidate": choice})
+        record["choice"] = choice
+        log.write("vote_cast", election=election.get("id"), candidate=choice, ok=bool((response or {}).get("ok", True)))
+    except urllib.error.HTTPError as error:
+        log.write("vote_error", status=error.code, detail=error.read().decode("utf-8", errors="replace")[:200])
+        print("Vote failed: HTTP {}".format(error.code), file=sys.stderr, flush=True)
+    except Exception as error:  # A vote problem must never touch the orders.
+        log.write("agent_error", stage="vote", error_type=type(error).__name__, message=str(error)[:200])
+        print("Vote failed: {}".format(error), file=sys.stderr, flush=True)
+
+
+def seconds_left(state):
+    """Seconds until the phase ends by the server's own clock, or None."""
+    try:
+        parse = lambda text: datetime.datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+        return (parse(state["phase_ends_at"]) - parse(state["server_time"])).total_seconds()
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def planned_key(state):
+    """The planned counts tonight (orders in so far per spot) as something comparable."""
+    planned = (state.get("forecast") or {}).get("planned")
+    return tuple(sorted(planned.items())) if isinstance(planned, dict) else None
+
+
 def practice(key, days, rivals, seed, log, agent):
     options = {"days": days, "rivals": rivals}
     if seed:
         options["seed"] = seed
     game = request("POST", API + "/practice", key, options, timeout=10)
     base = "https://nightshift.joinbuilders.org" + game["base"]
+    voted = {}
     state = request("GET", base + "/state", key)
     while state.get("phase") != "over":
         observe_state(agent, state, log)
         order, report = choose_order(agent, state, log)
+        if order is None:
+            order = decide(state)  # practice always plays the day
         log_decision(log, state, order, report)
+        if report:
+            for warning in report.get("warnings") or []:
+                log.write("warning", day=state.get("order_for_day"), text=warning)
+        # Practice plays the day the moment the order is in, so vote first (live bots vote after ordering).
+        maybe_vote(agent, state, log, lambda body: request("POST", base + "/vote", key, body, timeout=3), voted)
         result = request("POST", base + "/orders", key, order, timeout=10)
         state = result.get("state") or request("GET", base + "/state", key)
         log_result(log, state)
@@ -320,6 +390,8 @@ def live(key, log, agent):
     version = 0
     seen_results = set()
     planned = {}
+    replanned = {}
+    voted = {}
     sent = set()
     connected = False
     watched = watched_mtimes()
@@ -359,20 +431,55 @@ def live(key, log, agent):
                 # let it replace an older order (for example from before a restart).
                 if plan_id not in planned:
                     planned[plan_id] = choose_order(agent, state, log)
+                    replanned[plan_id] = planned_key(state)
+                    for warning in (planned[plan_id][1] or {}).get("warnings") or []:
+                        log.write("warning", day=day, text=warning)
+                        print("Warning: {}".format(warning), flush=True)
+                left = seconds_left(state)
+                if (state.get("mode") == "live" and (state.get("features") or {}).get("planned_counts")
+                        and left is not None and 3 < left < LATE_SECONDS and planned_key(state) is not None
+                        and replanned.get(plan_id) != planned_key(state)):
+                    # Late in the night the planned counts show where rivals really are: plan again.
+                    planned[plan_id] = choose_order(agent, state, log)
+                    replanned[plan_id] = planned_key(state)
+                    sent.discard(plan_id)
+                    print("Re-planned with the latest planned counts ({:.0f} s left).".format(left), flush=True)
                 order, report = planned[plan_id]
-                if plan_id not in sent and (not existing or any(
+                if order is None and plan_id not in sent:
+                    sent.add(plan_id)
+                    log.write("order_skipped", mode=state.get("mode"), market=state.get("market"), day=day,
+                              expected_profit=(report or {}).get("expected_profit"))
+                    print("{} market {} day {}: sitting out (cannot cover wages)".format(
+                        state.get("mode"), state.get("market"), day), flush=True)
+                elif order is not None and plan_id not in sent and (not existing or any(
                         existing.get(field) != value for field, value in order.items())):
                     log_decision(log, state, order, report)
                     started = time.monotonic()
-                    response = request("POST", API + "/orders", key, order, timeout=5)
+                    try:
+                        response = request("POST", API + "/orders", key, order, timeout=5)
+                    except urllib.error.HTTPError as error:
+                        detail = error.read().decode("utf-8", errors="replace")
+                        if error.code != 403:
+                            raise
+                        # Wrecked in a riot: the truck is out until its comeback day; do not hammer the API.
+                        sent.add(plan_id)
+                        log.write("order_refused", status=403, day=day, detail=detail[:200],
+                                  wrecked_until_day=(state.get("you") or {}).get("wrecked_until_day"))
+                        print("Order refused (403): {}".format(detail[:120]), file=sys.stderr, flush=True)
+                        response = None
                     elapsed_ms = round((time.monotonic() - started) * 1000)
-                    sent.add(plan_id)
-                    log.write("order_submitted", mode=state.get("mode"), market=state.get("market"),
-                              day=day, order=order, latency_ms=elapsed_ms,
-                              source="agent" if report else "heuristic")
-                    (state.get("you") or {})["order"] = response.get("order") or order
-                    print("{} market {} day {}: submitted {}".format(
-                        state.get("mode"), state.get("market"), day, order), flush=True)
+                    if response is not None:
+                        sent.add(plan_id)
+                        log.write("order_submitted", mode=state.get("mode"), market=state.get("market"),
+                                  day=day, order=order, latency_ms=elapsed_ms,
+                                  source="agent" if report else "heuristic")
+                        (state.get("you") or {})["order"] = response.get("order") or order
+                        print("{} market {} day {}: submitted {}".format(
+                            state.get("mode"), state.get("market"), day, order), flush=True)
+                # The order is in (or sat out): only now think about voting, with short timeouts.
+                if plan_id in sent or (existing and order is not None):
+                    maybe_vote(agent, state, log, lambda body: request("POST", API + "/vote", key, body, timeout=3),
+                               voted)
             log.save_state(state)
         except KeyboardInterrupt:
             print("Stopping bot.", flush=True)
@@ -388,6 +495,10 @@ def live(key, log, agent):
             log.write("error", error_type=type(error).__name__)
             print("Connection/state error: {}".format(error), file=sys.stderr, flush=True)
             time.sleep(0.2)
+        except Exception as error:  # An unexpected state shape must not kill the bot.
+            log.write("error", error_type=type(error).__name__, message=str(error)[:200])
+            print("Unexpected error: {!r}".format(error), file=sys.stderr, flush=True)
+            time.sleep(0.5)
 
 
 def main():

@@ -30,6 +30,15 @@ SPOT_PRIORS = {
     "northres": {"mu": 11.0, "sd": 2.8, "mix": (0.45, 0.47, 0.08)},
     "thompson": {"mu": 12.0, "sd": 2.8, "mix": (0.45, 0.40, 0.15)},
     "stadium": {"mu": 13.0, "sd": 2.8, "mix": (0.25, 0.50, 0.25)},
+    # The eight spots that open later, from the published table (premium share is "wants premium").
+    "fisher": {"mu": 14.0, "sd": 2.8, "mix": (0.10, 0.60, 0.30)},
+    "kottman": {"mu": 12.5, "sd": 2.8, "mix": (0.25, 0.50, 0.25)},
+    "mirror": {"mu": 12.0, "sd": 2.8, "mix": (0.30, 0.50, 0.20)},
+    "medcenter": {"mu": 13.0, "sd": 2.8, "mix": (0.25, 0.55, 0.20)},
+    "lane": {"mu": 12.0, "sd": 3.3, "mix": (0.50, 0.35, 0.15)},
+    "rpac": {"mu": 12.0, "sd": 2.8, "mix": (0.25, 0.50, 0.25)},
+    "schott": {"mu": 13.0, "sd": 2.8, "mix": (0.25, 0.55, 0.20)},
+    "gateway": {"mu": 11.5, "sd": 2.8, "mix": (0.45, 0.40, 0.15)},
 }
 GENERIC_PRIOR = {"mu": 12.0, "sd": 2.8, "mix": (0.35, 0.50, 0.15)}
 
@@ -41,6 +50,15 @@ WEATHER_EFFECT = {
     "northres": {"clear": 1.05, "cloudy": 1.0, "rain": 0.75, "cold": 0.85},
     "union": {"clear": 1.0, "cloudy": 1.0, "rain": 0.95, "cold": 0.95},
     "thompson": {"clear": 1.0, "cloudy": 1.0, "rain": 0.95, "cold": 0.95},
+    # New spots: Mirror Lake is outdoors, the Medical Center is rain-proof, the rest are guesses.
+    "mirror": {"clear": 1.1, "cloudy": 1.0, "rain": 0.5, "cold": 0.6},
+    "medcenter": {"clear": 1.0, "cloudy": 1.0, "rain": 1.0, "cold": 1.0},
+    "lane": {"clear": 1.05, "cloudy": 1.0, "rain": 0.75, "cold": 0.85},
+    "gateway": {"clear": 1.03, "cloudy": 1.0, "rain": 0.85, "cold": 0.9},
+    "fisher": {"clear": 1.0, "cloudy": 1.0, "rain": 0.95, "cold": 0.95},
+    "kottman": {"clear": 1.0, "cloudy": 1.0, "rain": 0.9, "cold": 0.92},
+    "rpac": {"clear": 1.0, "cloudy": 1.0, "rain": 0.95, "cold": 0.95},
+    "schott": {"clear": 1.0, "cloudy": 1.0, "rain": 0.9, "cold": 0.92},
 }
 
 # Price limits are discretized into bins for a fast fluid model of the customer queue.
@@ -86,15 +104,27 @@ def distance(a, b):
     return DISTANCES.get((a, b)) or DISTANCES.get((b, a)) or 600
 
 
+def make_distance(positions):
+    """Metres between spots: from the state's spot_info positions when known (new spots), else the table."""
+    def metres(a, b):
+        p, q = positions.get(a), positions.get(b)
+        if p and q:
+            return max(1.0, math.hypot(p[0] - q[0], p[1] - q[1]))
+        return distance(a, b)
+    return metres
+
+
 # Rough customer shares from the spot guide, to size a typical day when tomorrow has an event.
-SPOT_SHARE = {"highst": 0.24, "oval": 0.20, "union": 0.18, "northres": 0.16, "thompson": 0.14, "stadium": 0.08}
+SPOT_SHARE = {"highst": 0.24, "oval": 0.20, "union": 0.18, "northres": 0.16, "thompson": 0.14, "stadium": 0.08,
+              "fisher": 0.12, "kottman": 0.08, "mirror": 0.10, "medcenter": 0.14, "lane": 0.12, "rpac": 0.09,
+              "schott": 0.07, "gateway": 0.11}
 
 
 def _event_kind(event):
     text = "{} {}".format(event.get("key") or "", event.get("name") or "").lower()
-    for kind in ("gameday", "game day", "midterm", "concert", "late", "rally"):
+    for kind in ("gameday", "game day", "championship", "midterm", "concert", "late", "rally"):
         if kind in text:
-            return kind.replace(" ", "")
+            return "gameday" if kind in ("game day", "championship") else kind
     return text.strip()
 
 
@@ -163,12 +193,16 @@ def truck_profit(truck, salvage=False):
     return profit + (meals - sold) * cost * SALVAGE_RATE if salvage else profit
 
 
+# New rules are off until the state says otherwise; the first three are live and assumed when unreported.
+FEATURE_DEFAULTS = {"fair_choice": True, "walk_over": True, "salvage": True, "food": False, "moving_costs": False,
+                    "new_spots": False, "surprises": False, "football": False, "riots": False, "coupons": False,
+                    "staff": False, "planned_counts": False, "elections": False}
+
+
 def features_of(state):
-    """Which rule changes are live for the coming day (all three are live now; assumed when unreported)."""
+    """Which rule changes are live for the coming day (the original three assumed on when unreported)."""
     features = state.get("features") if isinstance(state.get("features"), dict) else {}
-    return {"fair_choice": bool(features.get("fair_choice", True)),
-            "walk_over": bool(features.get("walk_over", True)),
-            "salvage": bool(features.get("salvage", True))}
+    return {name: bool(features.get(name, default)) for name, default in FEATURE_DEFAULTS.items()}
 
 
 def _number(value, low=0.0, high=1e9):
@@ -217,8 +251,15 @@ def clean_day(last, spots=None):
             trucks.append(dict(truck, price=price, meals=meals, sold=min(sold, meals)))
         if hungry > customers + walked_in + 1e-6:
             issues.append("more hungry than customers at {}".format(spot))
+        free_food = _number(data.get("free_food") or 0, 0, 3000) or 0
         cleaned[spot] = {"customers": customers, "hungry": min(hungry, customers + walked_in),
-                         "walked_in": walked_in, "walked_out": walked_out, "trucks": trucks}
+                         "walked_in": walked_in, "walked_out": walked_out, "trucks": trucks,
+                         "distorted": free_food > 0}
+    # A giveaway, fire drill or protest takes customers away from one spot: do not learn prices from it.
+    for moment in last.get("moments") or []:
+        if isinstance(moment, dict) and moment.get("kind") in ("giveaway", "firedrill", "protest") \
+                and moment.get("spot") in cleaned:
+            cleaned[moment["spot"]]["distorted"] = True
     return cleaned, issues
 
 
@@ -244,8 +285,12 @@ def choice_weight(value, temperature):
     return math.exp(min(60.0, value / temperature)) if value >= 0 else 0.0
 
 
-def crowd_tables(customers, pop):
-    """Per minimum quality: customers by price-limit bin and their suffix sums, for O(1) tail lookups."""
+def crowd_tables(customers, pop, diets=None):
+    """Per minimum quality: customers by price-limit bin and their suffix sums, for O(1) tail lookups.
+
+    With a diet mix {any, meat, veggie} the crowd splits into one such table per diet."""
+    if diets:
+        return {diet: crowd_tables(customers * share, pop) for diet, share in diets.items() if share > 0}
     tables = []
     for row in pop:
         scaled = [customers * mass for mass in row]
@@ -267,6 +312,16 @@ def _tail(table, price):
     return row[start] * fraction + suffix[start + 1]
 
 
+def groups_of(tables):
+    """Crowd tables as (diet, per-quality tables) groups; one "any" group unless diets are modeled."""
+    return list(tables.items()) if isinstance(tables, dict) else [("any", tables)]
+
+
+def eats(diet, truck):
+    """Whether customers of this diet would buy from the truck: meat-only skip veggie trucks and vice versa."""
+    return diet == "any" or (truck.get("food") or "meat") == diet
+
+
 def allocate(tables, trucks):
     """Fluid model of one spot under fair choice; returns meals sold per truck and meals left.
 
@@ -281,15 +336,17 @@ def allocate(tables, trucks):
     if not prices:
         return sold, left
     types = []
-    for q in range(3):
-        tails = [_tail(tables[q], price) for price in prices] + [0.0]
-        for j, price in enumerate(prices):
-            mass = tails[j] - tails[j + 1]
-            if mass > 1e-9:
-                members = [i for i, t in enumerate(trucks)
-                           if weights[i] > 0 and t["price"] <= price + 1e-9 and t["qi"] >= q]
-                if members:
-                    types.append((mass, members))
+    for diet, group in groups_of(tables):
+        for q in range(3):
+            tails = [_tail(group[q], price) for price in prices] + [0.0]
+            for j, price in enumerate(prices):
+                mass = tails[j] - tails[j + 1]
+                if mass > 1e-9:
+                    members = [i for i, t in enumerate(trucks)
+                               if weights[i] > 0 and t["price"] <= price + 1e-9 and t["qi"] >= q
+                               and eats(diet, t)]
+                    if members:
+                        types.append((mass, members))
     remaining = 1.0
     for _ in range(n + 1):
         rate = [0.0] * n
@@ -322,6 +379,199 @@ def simulate_spot(customers, pop, trucks, temperature=TEMPERATURE):
     return sold, max(0.0, customers - sum(sold))
 
 
+FOODS = ("meat", "veggie")
+MEALS_PER_EMPLOYEE = 50    # sales are capped at employees x 50, walk-ins included
+DEFAULT_WAGE = 6.0
+# Base diet shares (meat-only, veggie-only) from the docs; the forecast scales them by 0.6.
+DIET_BASE = {"oval": (0.20, 0.12), "union": (0.20, 0.12), "northres": (0.20, 0.12), "thompson": (0.15, 0.20),
+             "stadium": (0.27, 0.03), "highst": (0.24, 0.06), "fisher": (0.40, 0.10), "kottman": (0.10, 0.50),
+             "mirror": (0.25, 0.20), "medcenter": (0.25, 0.15), "gateway": (0.25, 0.15), "lane": (0.30, 0.10),
+             "rpac": (0.45, 0.10), "schott": (0.35, 0.10)}
+GAME_DAY_MEAT_SHIFT = 0.08  # share of every spot's customers who switch from any to meat-only on game days
+# Whether forecast.expected_customers already contains the laws in force (checked against practice markets).
+FORECAST_HAS_LAWS = True
+TERM_DAYS = 8
+PROTEST_SHARE = 0.4        # 30-50% of the target spot's customers refuse the protested truck
+# Riots: (spot, intensity, radius metres, chance the riot happens) by cause.
+RIOTS = {"michigan": ("highst", 0.7, 260.0, 0.45), "title": ("stadium", 0.95, 380.0, 0.8)}
+
+LAW_WORDS = (("veggie_tax", ("veggie",)), ("meat_tax", ("meat",)), ("junk_tax", ("junk",)),
+             ("luxury_tax", ("luxury",)), ("price_cap", ("cap",)), ("price_floor", ("floor",)),
+             ("curfew", ("curfew",)), ("quiet_core", ("quiet",)), ("tailgate", ("tailgate",)),
+             ("crackdown", ("crackdown",)), ("tax_the_top", ("the_top", "top")), ("flat_fee", ("flat",)))
+CAMPUS_LAWS = {"curfew": {"highst": 0.75, "northres": 0.75, "oval": 1.1, "thompson": 1.1, "union": 1.1},
+               "quiet_core": {"oval": 0.85, "thompson": 0.85, "union": 0.85, "highst": 1.2, "northres": 1.2}}
+GAME_LAWS = {"tailgate": {"stadium": 1.3, "highst": 1.3, "schott": 1.3, "rest": 0.9},
+             "crackdown": {"stadium": 0.85, "highst": 0.85, "schott": 0.85, "rest": 1.1}}
+
+
+def law_kind(law):
+    """Which of the published laws a law or policy is, from its key (or the start of its text)."""
+    key = str(law.get("key") or "").lower() or str(law.get("text") or "").split(":")[0].lower()
+    key = key.replace(" ", "_").replace("-", "_")
+    for kind, words in LAW_WORDS:
+        if any(word in key for word in words):
+            return kind
+    return None
+
+
+def _walk_numbers(value, depth=0):
+    """Every (key, number) pair nested in a params structure."""
+    if isinstance(value, dict) and depth < 4:
+        for key, inner in value.items():
+            number = _number(inner, -1e6, 1e6)
+            if number is not None:
+                yield str(key).lower(), number
+            else:
+                for pair in _walk_numbers(inner, depth + 1):
+                    yield pair
+
+
+def _param(params, words, default, low=0.0, high=1e6):
+    for key, number in _walk_numbers(params):
+        if any(word in key for word in words) and low <= number <= high:
+            return number
+    return default
+
+
+def _spot_table(params, defaults):
+    """A {spot: multiplier} table from a law's params when it carries one, else the published numbers."""
+    found = {k: v for k, v in _walk_numbers(params) if k in SPOT_SHARE or k in ("rest", "other", "others")}
+    if sum(1 for k in found if k in SPOT_SHARE) >= 2:
+        found.setdefault("rest", found.pop("other", found.pop("others", 1.0)))
+        return found
+    return defaults
+
+
+def law_policy(laws, game_day=False):
+    """What the laws in force do to a truck: price cap/floor, per-meal taxes, crowd multipliers, money terms.
+
+    `laws` are the politics.laws (or a candidate's policies): {key, text, params}. Published numbers are
+    the fallback when a law's params are not in the shape expected here."""
+    policy = {"cap": None, "floor": None, "tax_quality": {}, "tax_food": {}, "tables": [],
+              "top": None, "fixed": 0.0, "riot": 1.0, "kinds": []}
+    for law in laws if isinstance(laws, list) else []:
+        if not isinstance(law, dict):
+            continue
+        kind = law_kind(law)
+        params = law.get("params") if isinstance(law.get("params"), dict) else {}
+        if kind is None:
+            continue
+        policy["kinds"].append(kind)
+        if kind == "price_cap":
+            policy["cap"] = min(policy["cap"] or 1e9, _param(params, ("max", "cap", "price"), 12.0, 1, 100))
+        elif kind == "price_floor":
+            policy["floor"] = max(policy["floor"] or 0.0, _param(params, ("min", "floor", "price"), 7.5, 1, 100))
+        elif kind in ("meat_tax", "veggie_tax", "junk_tax", "luxury_tax"):
+            defaults = {"meat_tax": {"meat": 0.5, "veggie": -0.5}, "veggie_tax": {"veggie": 0.5, "meat": -0.5},
+                        "junk_tax": {"cheap": 0.5, "premium": -0.5}, "luxury_tax": {"premium": 0.5, "cheap": -0.5}}[kind]
+            given = params.get("per_meal") if isinstance(params.get("per_meal"), dict) else {}
+            table = {k: _number(v, -50, 50) for k, v in given.items()}
+            table = {k: v for k, v in table.items() if v is not None and k in QUALITIES + FOODS} or defaults
+            for name, amount in table.items():
+                bucket = policy["tax_quality"] if name in QUALITIES else policy["tax_food"]
+                bucket[name] = bucket.get(name, 0.0) + amount
+        elif kind in CAMPUS_LAWS or (kind in GAME_LAWS and game_day):
+            policy["tables"].append(_spot_table(params, (CAMPUS_LAWS.get(kind) or GAME_LAWS.get(kind))))
+            if kind == "tailgate":
+                policy["riot"] *= 1.5
+        elif kind == "crackdown":
+            policy["riot"] = 0.0
+        elif kind in ("tax_the_top", "flat_fee"):
+            threshold = _param(params, ("above", "threshold", "over"), 500.0, 1, 1e5)
+            rate = _param(params, ("rate", "share", "pct", "percent"), 0.10, 0.0, 100.0)
+            rate = rate / 100 if rate > 1 else rate
+            fixed = _param(params, ("fee", "per_truck", "subsidy", "flat", "amount"), 20.0, 0.0, 500.0)
+            policy["top"] = (threshold, rate if kind == "tax_the_top" else -rate)
+            policy["fixed"] += -fixed if kind == "tax_the_top" else fixed
+    return policy
+
+
+def crowd_mult(policy, spot):
+    """How the laws in force scale the crowd at a spot."""
+    mult = 1.0
+    for table in policy["tables"]:
+        mult *= table.get(spot, table.get("rest", 1.0))
+    return mult
+
+
+def charged_price(price, policy):
+    """The price customers pay: a cap lowers it, a floor raises it."""
+    if policy.get("cap") is not None:
+        price = min(price, policy["cap"])
+    if policy.get("floor") is not None:
+        price = max(price, policy["floor"])
+    return price
+
+
+def meal_tax(policy, quality, food):
+    """Tax per meal sold under the laws (negative: rebate)."""
+    return policy["tax_quality"].get(quality, 0.0) + (policy["tax_food"].get(food, 0.0) if food else 0.0)
+
+
+def riot_warnings(forecast, positions):
+    """Riot risks the forecast warns about: [{spot, x, z, intensity, radius, chance}].
+
+    The warning's shape is not published, so look for the word riot in events and warning-like lists, take
+    explicit numbers when present, and otherwise infer the cause (title -> Stadium, else Michigan -> High Street)."""
+    found = []
+    items = []
+    for field in ("events", "warnings", "riots", "riot", "alerts"):
+        value = forecast.get(field)
+        items += [(field, v) for v in (value if isinstance(value, list) else [value]) if v]
+    for field, item in items:
+        text = json.dumps(item, default=str).lower() if not isinstance(item, str) else item.lower()
+        if "riot" not in text and field not in ("riots", "riot"):
+            continue
+        item = item if isinstance(item, dict) else {}
+        title = any(word in text for word in ("title", "championship", "national")) \
+            and "high street" not in text and "highst" not in text and "michigan" not in text
+        spot, intensity, radius, chance = RIOTS["title" if title else "michigan"]
+        center = item.get("center") if isinstance(item.get("center"), dict) else {}
+        # A game's own spot is the Stadium; only an item about the riot itself says where it will be.
+        if (field in ("riots", "riot") or "riot" in str(item.get("key") or "").lower()) \
+                and isinstance(item.get("spot"), str) and item["spot"] in positions:
+            spot = item["spot"]
+        x, z = center.get("x"), center.get("z")
+        if _number(x, -1e5, 1e5) is None or _number(z, -1e5, 1e5) is None:
+            x, z = (positions.get(spot) or (0.0, 0.0))
+        found.append({"spot": spot, "x": float(x), "z": float(z),
+                      "intensity": _number(item.get("intensity"), 0.01, 1.0) or intensity,
+                      "radius": _number(item.get("radius"), 50, 5000) or radius,
+                      "chance": _number(item.get("chance") or item.get("probability"), 0.01, 1.0) or chance})
+    return found
+
+
+def riot_cost(warnings, position, day_profit, policy):
+    """Expected cost of parking at `position` when a riot may follow: wreck (out 2 days) or a repair bill."""
+    total = 0.0
+    for risk in warnings:
+        if position is None:
+            continue
+        d = math.hypot(position[0] - risk["x"], position[1] - risk["z"])
+        hit = min(1.0, risk["intensity"] * policy.get("riot", 1.0) * math.exp(-d / risk["radius"]))
+        repair = 30.0 + 120.0 * math.exp(-d / risk["radius"])
+        total += risk["chance"] * hit * (0.3 * 2.0 * max(0.0, day_profit) + 0.7 * repair)
+    return total
+
+
+def diet_mix(raw, spot, game_day):
+    """{any, meat, veggie} shares for a spot from the forecast; game days shift 8% of customers to meat-only."""
+    mix = raw.get(spot) if isinstance(raw, dict) else None
+    if not isinstance(mix, dict):
+        return None
+    meat, veggie = _number(mix.get("meat"), 0, 1), _number(mix.get("veggie"), 0, 1)
+    if meat is None or veggie is None or meat + veggie > 1:
+        return None
+    if game_day:
+        # The forecast may already contain the shift: only add it when meat looks like the unshifted base.
+        base = DIET_BASE.get(spot)
+        shifted = base is not None and meat >= 0.6 * base[0] + GAME_DAY_MEAT_SHIFT * 0.6
+        if not shifted:
+            meat += min(GAME_DAY_MEAT_SHIFT, 1.0 - meat - veggie)
+    return {"any": max(0.0, 1.0 - meat - veggie), "meat": meat, "veggie": veggie}
+
+
 class Agent:
     """Keeps day history and learned parameters on disk; plans one order per night."""
 
@@ -340,6 +590,7 @@ class Agent:
         self.last_report = None
         self.surprise = SURPRISE_PRIOR[0]
         self.rejected = []
+        self._vote_cache = {}
         self._load()
 
     # ---------- persistence ----------
@@ -413,7 +664,9 @@ class Agent:
                                    "weather": last.get("weather") if isinstance(last.get("weather"), str) else None,
                                    "events": [e for e in last.get("events") or [] if isinstance(e, dict)]
                                    if isinstance(last.get("events"), list) else [],
-                                   "spots": last.get("spots")}
+                                   "spots": last.get("spots"),
+                                   "moments": [m for m in last.get("moments") or [] if isinstance(m, dict)]
+                                   if isinstance(last.get("moments"), list) else []}
             return self._observe(cleaned)
         except Exception as error:  # A bad state must never stop the bot.
             self.rejected = (self.rejected + [{"issues": ["unreadable state: {}".format(type(error).__name__)]}])[-20:]
@@ -446,8 +699,9 @@ class Agent:
             "you_id": (state.get("you") or {}).get("id"), "features": features_of(state),
             "spots": {spot: {"customers": data["customers"], "hungry": data["hungry"],
                              "walked_in": data["walked_in"], "walked_out": data["walked_out"],
+                             "distorted": data["distorted"],
                              "trucks": [{field: truck.get(field) for field in
-                                         ("id", "truck_name", "price", "quality", "meals", "sold")}
+                                         ("id", "truck_name", "price", "quality", "meals", "sold", "food")}
                                         for truck in data["trucks"]]}
                       for spot, data in cleaned.items()},
             "rep_avg": {truck.get("id"): truck.get("reputation_avg") for truck in state.get("trucks") or []},
@@ -481,6 +735,8 @@ class Agent:
         for spot, data in record["spots"].items():
             customers = float(data.get("customers") or 0)
             trucks = data.get("trucks") or []
+            if data.get("distorted"):
+                continue
             if forecast and customers > 0:
                 self._learn_ratio(spot, customers, forecast, record.get("weather"))
             if not trucks or customers <= 0:
@@ -815,10 +1071,11 @@ class Agent:
             offer = latest_offer.get(truck_id) or {}
             quality = offer.get("quality") if offer.get("quality") in QUALITIES else "premium"
             profiles.append({
-                "id": truck_id, "name": names.get(truck_id) or offer.get("truck_name") or truck_id,
+                "id": truck_id, "name": str(names.get(truck_id) or offer.get("truck_name") or truck_id),
                 "where": where, "last": last_spot.get(truck_id), "quality": quality,
                 "price": float(offer.get("price") or 10.0),
                 "meals": float(offer.get("meals") or 90),
+                "food": offer.get("food") if offer.get("food") in FOODS else "meat",
                 "cut_chance": min(0.9, cut_chance), "cut_size": min(0.35, max(0.05, cut_size)),
                 "stay": round(stay, 2), "active": round(active, 2), "known": bool(offer),
             })
@@ -884,6 +1141,38 @@ class Agent:
         return {spot: min(0.9, (counts[spot] + 1.0) / (len(recent) + 3.0)) for spot in spots}
 
     @staticmethod
+    def _clean_politics(raw):
+        """Laws in force, the office holder and the campaign, with anything unreadable dropped."""
+        raw = raw if isinstance(raw, dict) else {}
+
+        def policies(items):
+            return [{"key": str(p.get("key") or ""), "text": str(p.get("text") or "")[:200],
+                     "params": p.get("params") if isinstance(p.get("params"), dict) else {}}
+                    for p in items or [] if isinstance(p, dict)] if isinstance(items, list) else []
+
+        office = raw.get("office") if isinstance(raw.get("office"), dict) else None
+        holder = (office or {}).get("holder") if isinstance((office or {}).get("holder"), dict) else {}
+        election = raw.get("election") if isinstance(raw.get("election"), dict) else None
+        result = {"laws": policies(raw.get("laws")), "office": None, "election": None}
+        if office:
+            result["office"] = {"holder": str(holder.get("name") or ""), "holder_id": holder.get("id"),
+                                "since_day": office.get("since_day"), "until_day": office.get("until_day"),
+                                "crisis": bool(office.get("crisis")), "policies": policies(holder.get("policies"))}
+        if election:
+            candidates = [{"id": str(c.get("id")), "name": str(c.get("name") or ""),
+                           "policies": policies(c.get("policies"))}
+                          for c in election.get("candidates") or [] if isinstance(c, dict) and c.get("id") is not None] \
+                if isinstance(election.get("candidates"), list) else []
+            tally = election.get("tally") if isinstance(election.get("tally"), dict) else {}
+            votes = election.get("votes") if isinstance(election.get("votes"), dict) else {}
+            result["election"] = {"id": str(election.get("id")), "vote_day": _number(election.get("vote_day"), 0, 1e6),
+                                  "nights_left": _number(election.get("nights_left"), 0, 100),
+                                  "candidates": candidates,
+                                  "tally": {str(k): _number(v, 0, 1e4) or 0 for k, v in tally.items()},
+                                  "votes": {str(k): str(v) for k, v in votes.items()}}
+        return result
+
+    @staticmethod
     def _clean_state(state):
         """The parts of a state that planning reads, with anything odd or missing replaced by a safe default."""
         state = state if isinstance(state, dict) else {}
@@ -907,6 +1196,14 @@ class Agent:
             given = table(raw.get(field))
             rules[field] = {q: _number(given.get(q), 0.01, 1000) or defaults[q] for q in QUALITIES}
         rules["qualities"] = rules["qualities"] or list(QUALITIES)
+        rules["foods"] = [f for f in raw.get("foods") or [] if f in FOODS] if isinstance(raw.get("foods"), list) else []
+        costs_from = table(raw.get("move_costs"))
+        rules["move_costs"] = {a: {b: _number(c, 0, 1000) for b, c in table(row).items() if _number(c, 0, 1000) is not None}
+                               for a, row in costs_from.items()}
+        staff_rules = table(raw.get("staff"))
+        rules["staff"] = {"meals_per_employee": _number(staff_rules.get("meals_per_employee"), 1, 1000)
+                          or MEALS_PER_EMPLOYEE,
+                          "default_wage": _number(staff_rules.get("default_wage"), 0, 1000) or DEFAULT_WAGE}
         forecast = table(state.get("forecast"))
         cleaned_forecast = {"day": count(forecast.get("day")),
                             "expected_customers": clean_forecast(forecast.get("expected_customers"), rules["spots"]),
@@ -915,21 +1212,83 @@ class Agent:
                                         "spot": e.get("spot")} for e in forecast.get("events") or []
                                        if isinstance(e, dict) and isinstance(e.get("spot"), str)]
                             if isinstance(forecast.get("events"), list) else []}
+        for event, raw_event in zip(cleaned_forecast["events"], [e for e in forecast.get("events") or []
+                                                                  if isinstance(e, dict) and isinstance(e.get("spot"), str)]
+                                    if isinstance(forecast.get("events"), list) else []):
+            event["opponent"] = str(raw_event.get("opponent") or "")
+            event["text"] = str(raw_event.get("effect") or raw_event.get("text") or "")[:300]
+        cleaned_forecast["diets"] = {spot: mix for spot, mix in table(forecast.get("diets")).items()
+                                     if isinstance(mix, dict)}
+        planned = {k: count(v) for k, v in table(forecast.get("planned")).items()}
+        cleaned_forecast["planned"] = {k: v for k, v in planned.items() if v is not None} \
+            if isinstance(forecast.get("planned"), dict) else None
+        cleaned_forecast["riots"] = {field: forecast.get(field) for field in ("events", "warnings", "riots", "riot", "alerts")
+                                     if forecast.get(field)}
+        positions = {}
+        for spot, info in table(state.get("spot_info")).items():
+            info = info if isinstance(info, dict) else {}
+            x, z = _number(info.get("x"), -1e5, 1e5), _number(info.get("z"), -1e5, 1e5)
+            if x is not None and z is not None:
+                positions[spot] = (x, z)
         you = table(state.get("you"))
         reputation = {k: _number(v, 0, 100) for k, v in table(you.get("reputation")).items()}
         trucks = [{"id": t.get("id"), "truck_name": str(t.get("truck_name") or ""),
-                   "reputation_avg": _number(t.get("reputation_avg"), 0, 100)}
+                   "reputation_avg": _number(t.get("reputation_avg"), 0, 100),
+                   "cash": _number(t.get("cash"), -1e9, 1e9),
+                   "employees": _number(t.get("employees"), 0, 1000), "wage": _number(t.get("wage"), 0, 1000)}
                   for t in state.get("trucks") or [] if isinstance(t, dict) and isinstance(t.get("id"), str)] \
             if isinstance(state.get("trucks"), list) else []
+        staff = table(you.get("staff"))
+        labor = table(state.get("labor"))
+        coupons = [c for c in you.get("coupons") or [] if isinstance(c, dict)] \
+            if isinstance(you.get("coupons"), list) else []
+        order = you.get("order") if isinstance(you.get("order"), dict) else None
+        last_day = table(state.get("last_day"))
+        moves = [m for m in last_day.get("moments") or [] if isinstance(m, dict)] \
+            if isinstance(last_day.get("moments"), list) else []
+        poached = [l for l in last_day.get("labor") or [] if isinstance(l, dict)] \
+            if isinstance(last_day.get("labor"), list) else []
+        politics = Agent._clean_politics(state.get("politics"))
         return {"mode": str(state.get("mode") or ""), "market": count(state.get("market")),
                 "day": count(state.get("day")), "days": count(state.get("days")),
                 "order_for_day": count(state.get("order_for_day")), "rules": rules,
                 "features": features_of(state), "forecast": cleaned_forecast,
                 "you": {"id": you.get("id") if isinstance(you.get("id"), str) else None,
-                        "reputation": {k: v for k, v in reputation.items() if v is not None}},
-                "trucks": trucks}
+                        "reputation": {k: v for k, v in reputation.items() if v is not None},
+                        "cash": _number(you.get("cash"), -1e9, 1e9),
+                        "order": order, "last_spot": you.get("last_spot") if isinstance(you.get("last_spot"), str) else None,
+                        "vote": you.get("vote") if isinstance(you.get("vote"), str) else None,
+                        "wrecked_until_day": count(you.get("wrecked_until_day")),
+                        "staff": {k: _number(staff.get(k), 0, 1e6) for k in
+                                  ("employees", "target", "wage", "capacity", "idle_days")} if staff else None,
+                        "coupons": coupons},
+                "trucks": trucks, "spot_positions": positions, "politics": politics,
+                "labor": {k: _number(v, 0, 1e6) for k, v in labor.items()},
+                "last_you": {"status": table(last_day.get("you")).get("status")},
+                "poaching": [{"from": p.get("from"), "to": p.get("to"), "count": _number(p.get("count"), 0, 1000),
+                              "wage": _number(p.get("wage"), 0, 1000)} for p in poached],
+                "moments": [{"kind": m.get("kind"), "spot": m.get("spot")} for m in moves],
+                "time": {"server": state.get("server_time"), "ends": state.get("phase_ends_at")}}
 
-    def plan(self, state, time_limit=1.0):
+    def _crew(self, state, rules):
+        """Tomorrow's crew, capacity and daily wages when staff is live: (crew, capacity, wage, employees)."""
+        staff = (state.get("you") or {}).get("staff") or {}
+        per = float((rules.get("staff") or {}).get("meals_per_employee") or MEALS_PER_EMPLOYEE)
+        employees, target, wage = staff.get("employees"), staff.get("target"), staff.get("wage")
+        if wage is None:
+            wage = float((rules.get("staff") or {}).get("default_wage") or DEFAULT_WAGE)
+        if employees is None and target is None:
+            return None, None, wage, None
+        pool = (state.get("labor") or {}).get("unemployed")
+        # Each morning the crew is trimmed or refilled to the target; refilling needs unemployed workers.
+        crew = employees if employees is not None else target
+        if target is not None and employees is not None:
+            crew = target if employees > target or pool is None or pool > 0 else employees
+        return float(crew), float(crew) * per, float(wage), employees
+
+    def plan(self, state, time_limit=1.0, laws=None, only=None, record=True):
+        """Plan tonight's order: (order, report). `laws` replaces the laws in force (to judge a candidate in a
+        vote), `only` limits the spots compared and `record=False` leaves the saved report alone."""
         started = time.monotonic()
         state = self._clean_state(state)
         rules = state.get("rules") or {}
@@ -941,6 +1300,8 @@ class Agent:
         allowed -= set(settings.get("avoid") or [])
         # The team can restrict where the truck parks; ignore a restriction that leaves nothing.
         spots = [spot for spot in all_spots if spot in allowed] or all_spots
+        if only:
+            spots = [spot for spot in spots if spot in only] or spots
         prefer = {spot: float(bonus) for spot, bonus in (settings.get("prefer") or {}).items()
                   if isinstance(bonus, (int, float))}
         values = rules.get("values") or DEFAULT_VALUES
@@ -954,6 +1315,7 @@ class Agent:
         forecast = state.get("forecast") or {}
         expected = clean_forecast(forecast.get("expected_customers"), all_spots)
         events = [e for e in forecast.get("events") or [] if isinstance(e, dict)]
+        game_day = any(_event_kind(e) == "gameday" for e in events)
         chances = self._weather(forecast)
         total_chance = sum(chances.values()) or 1.0
         mode, market = state.get("mode"), state.get("market")
@@ -961,6 +1323,48 @@ class Agent:
         days_left = max(0, int(state.get("days") or day) - day)
         you = state.get("you") or {}
         own_rep = you.get("reputation") or {}
+        positions = state.get("spot_positions") or {}
+        metres = make_distance(positions)
+        warnings = []
+
+        # Laws in force, or a candidate's laws when judging a vote.
+        in_force = law_policy(state["politics"]["laws"], game_day) if features["elections"] else law_policy([])
+        policy = in_force if laws is None else law_policy(laws, game_day)
+
+        def crowd_factor(spot):
+            if laws is None:
+                return 1.0 if FORECAST_HAS_LAWS else crowd_mult(policy, spot)
+            return crowd_mult(policy, spot) / (crowd_mult(in_force, spot) if FORECAST_HAS_LAWS else 1.0)
+
+        # Staff: wages on days we open, and sales (so meals) capped at employees x 50.
+        crew = capacity = employees = None
+        wages = 0.0
+        if features["staff"]:
+            crew, capacity, wage, employees = self._crew(state, rules)
+            if crew is not None:
+                wages = crew * wage
+                if crew <= 0:
+                    warnings.append("no staff: the truck cannot open")
+                elif employees is not None and employees < crew:
+                    warnings.append("{} of {} employees: hiring the rest tomorrow morning".format(
+                        int(employees), int(crew)))
+        # Coupons dropped on us pay half price for 20% of tomorrow's buyers each.
+        unused = sum(1 for c in you.get("coupons") or [] if c.get("applied_day") is None)
+        rev_mult = 1.0 - 0.5 * min(0.6, 0.2 * unused) if features["coupons"] else 1.0
+        if rev_mult < 1.0:
+            warnings.append("{} coupon drop(s) on us: tomorrow's revenue x {:.2f}".format(unused, rev_mult))
+        riots = riot_warnings(forecast.get("riots") or {}, positions) if features["riots"] else []
+        if riots:
+            warnings.append("riot warning for {}".format(", ".join(sorted({r["spot"] for r in riots}))))
+        planned = None
+        if features["planned_counts"] and isinstance(forecast.get("planned"), dict):
+            planned = {spot: count for spot, count in forecast["planned"].items() if spot in all_spots}
+            own = (you.get("order") or {}).get("spot")
+            if own in planned and planned[own] > 0:
+                planned[own] -= 1  # the count includes our own order
+        foods = (rules.get("foods") or list(FOODS)) if features["food"] else []
+        foods = [f for f in FOODS if f in foods] or (["meat"] if features["food"] else [])
+
         rep_avg = {t.get("id"): t.get("reputation_avg") for t in state.get("trucks") or []}
         reps = self.reputations(mode, market, rep_avg=rep_avg)
         profiles = self.rival_profiles(state)
@@ -979,9 +1383,13 @@ class Agent:
 
         seed = (int(market or 0) * 1000 + day) * 7919 + len(profiles)
         # Every spot is modeled, not just the allowed ones: hungry customers walk between neighbours.
-        lineups = self._lineups(profiles, all_spots, "where", LINEUP_SAMPLES, random.Random(seed))
+        lineups = self._lineups(profiles, all_spots, "where", LINEUP_SAMPLES, random.Random(seed), planned)
         by_id = {profile["id"]: profile for profile in profiles}
+        counted = {spot: sum(len(lineup) * weight for lineup, weight in table.items())
+                   for spot, table in lineups.items()}
         phantom = self.phantom_odds()
+        if planned and sum(planned.values()) >= sum(sum(p["where"].values()) for p in profiles) - 0.5:
+            phantom *= 0.5  # nearly every rival has ordered: a surprise newcomer is less likely
         lineups = self._with_phantom(lineups, phantom, by_id)
 
         model = {}
@@ -995,14 +1403,15 @@ class Agent:
             for weather, chance in chances.items():
                 for z, weight in NOISE_POINTS:
                     count = forecast_count * effect.get(weather, 1.0) / mean_effect * math.exp(ratio_mean + z * ratio_sd)
-                    key = int(round(count))
+                    key = int(round(count * crowd_factor(spot)))
                     crowd_points[key] = crowd_points.get(key, 0.0) + chance / total_chance * weight
+            diets = diet_mix(forecast.get("diets"), spot, game_day) if foods else None
             scenarios = self._scenarios(lineups[spot], self._condense(crowd_points), pop, spot, reps, by_id,
-                                        values, temperature)
+                                        values, temperature, policy, diets)
             model[spot] = {"scenarios": scenarios, "mu": mu, "sd": sd, "observations": observations,
-                           "forecast": forecast_count}
+                           "forecast": forecast_count, "diets": diets}
 
-        walkers = self._walkers(model, lineups, all_spots) if features["walk_over"] else {}
+        walkers = self._walkers(model, lineups, all_spots, metres) if features["walk_over"] else {}
 
         rivals_report = {}
         per_spot = []
@@ -1012,69 +1421,134 @@ class Agent:
             scenarios, inflow = entry["scenarios"], walkers.get(spot, 0.0)
             chance_here = {p["name"]: p["where"].get(spot, 0.0) for p in profiles}
             rivals_report[spot] = {
-                "expected": round(sum(chance_here.values()), 2),
+                "expected": round(counted[spot] if planned else sum(chance_here.values()), 2),
                 "likely": sorted(([name, round(chance, 2)] for name, chance in chance_here.items() if chance >= 0.2),
                                  key=lambda item: -item[1]),
                 "customer_limit": round(entry["mu"], 2), "limit_spread": round(entry["sd"], 2),
                 "observations": entry["observations"], "walk_in": round(inflow, 1),
             }
 
+            move_cost = 0.0
+            last_spot = you.get("last_spot")
+            if features["moving_costs"] and last_spot and last_spot != spot:
+                given = (rules.get("move_costs") or {}).get(last_spot, {}).get(spot)
+                if given is None:
+                    given = round(2.0 + 0.01 * metres(last_spot, spot))
+                move_cost = float(given)
+            fixed = wages + move_cost + policy["fixed"]
+            rivals_report[spot]["move_cost"] = move_cost
             factor = rep_factor(float(own_rep.get(spot, 50)))
-            spot_best = None
-            for quality in qualities:
+
+            def best_for(quality, food, scenarios=scenarios, inflow=inflow, fixed=fixed, factor=factor, spot=spot):
                 qi = QUALITIES.index(quality)
                 base_value = float(values.get(quality, DEFAULT_VALUES[quality]))
-                value = base_value * factor
                 cost = float(costs.get(quality, DEFAULT_COSTS[quality]))
                 max_meals = int(budget // cost)
-                top = min(price_max, value - 0.01)
+                if capacity is not None:
+                    max_meals = min(max_meals, int(capacity))
+                tax = meal_tax(policy, quality, food)
+                top = min(price_max, base_value * factor - 0.01)
+                low = price_min
+                if policy["cap"] is not None:
+                    top = min(top, policy["cap"])  # posting above the cap changes nothing
+                if policy["floor"] is not None:
+                    low = max(low, policy["floor"])
 
-                def evaluate(price, scenarios=scenarios, value=value, qi=qi, cost=cost, max_meals=max_meals,
-                             inflow=inflow):
-                    points = self._points(scenarios, price, value - price, qi, temperature, inflow)
-                    return self._best_meals(points, price, cost, max_meals, risk, salvage)
+                def evaluate(price, value, fixed_meals=None):
+                    charged = charged_price(price, policy)
+                    points = self._points(scenarios, charged, value - charged, qi, temperature, inflow, food,
+                                          capacity)
+                    return self._best_meals(points, charged * rev_mult - tax, cost, max_meals, risk, salvage,
+                                            fixed_meals, fixed, policy["top"])
 
+                value = base_value * factor
                 tried = {}
-                step_price = max(price_min, math.ceil((cost + 0.25) * 4) / 4)
+                step_price = max(low, math.ceil((cost + 0.25) * 4) / 4)
                 coarse = []
                 while step_price <= top:
                     coarse.append(round(step_price, 2))
                     step_price += 0.75
                 best_row = None
                 for price in coarse:
-                    row = evaluate(price)
+                    row = evaluate(price, value)
                     tried[price] = row
                     if row is not None and (best_row is None or row["objective"] > tried[best_row]["objective"]):
                         best_row = price
-                if best_row is not None:
-                    # Refine around the best coarse price in quarter-dollar steps.
-                    for offset in (-0.5, -0.25, 0.25, 0.5):
-                        price = round(best_row + offset, 2)
-                        if price_min <= price <= top and price > cost and price not in tried:
-                            tried[price] = evaluate(price)
-                    price = max((p for p in tried if tried[p] is not None), key=lambda p: tried[p]["objective"])
-                    candidate = tried[price]
-                    rep_bonus = self._reputation_bonus(
-                        spot, quality, price, candidate, scenarios, inflow, temperature, base_value, cost,
-                        max_meals, risk, salvage, own_rep, days_left, state) * candidate["p_sell"]
-                    candidate.update(spot=spot, quality=quality, price=round(price, 2),
-                                     rep_bonus=round(rep_bonus, 2),
-                                     score=candidate["objective"] + rep_bonus + prefer.get(spot, 0.0))
-                    if spot_best is None or candidate["score"] > spot_best["score"]:
-                        spot_best = candidate
+                if best_row is None:
+                    return None
+                # Refine around the best coarse price in quarter-dollar steps.
+                for offset in (-0.5, -0.25, 0.25, 0.5):
+                    price = round(best_row + offset, 2)
+                    if low <= price <= top and price > cost and price not in tried:
+                        tried[price] = evaluate(price, value)
+                price = max((p for p in tried if tried[p] is not None), key=lambda p: tried[p]["objective"])
+                candidate = dict(tried[price])
+                rep_bonus = self._reputation_bonus(spot, quality, price, candidate, evaluate, base_value, own_rep,
+                                                   days_left, state) * candidate["p_sell"]
+                candidate.update(spot=spot, quality=quality, price=round(price, 2), food=food,
+                                 rep_bonus=round(rep_bonus, 2), move_cost=move_cost,
+                                 score=candidate["objective"] + rep_bonus + prefer.get(spot, 0.0))
+                return candidate
+
+            first_food = foods[0] if foods else None
+            spot_best = None
+            for quality in qualities:
+                candidate = best_for(quality, first_food)
+                if candidate is not None and (spot_best is None or candidate["score"] > spot_best["score"]):
+                    spot_best = candidate
                 if time.monotonic() - started > time_limit:
                     break
+            if spot_best and len(foods) > 1:
+                # Veggie-only customers only buy veggie, so try the other food on the best quality.
+                other = best_for(spot_best["quality"], foods[1])
+                if other is not None and other["score"] > spot_best["score"]:
+                    spot_best = other
             if spot_best:
                 spot_best["forecast"] = entry["forecast"]
+                spot_best["riot_cost"] = 0.0
+                if riots:
+                    cost = riot_cost(riots, positions.get(spot), spot_best["expected_profit"], policy)
+                    spot_best["riot_cost"] = cost
+                    for field in ("expected_profit", "objective", "score"):
+                        spot_best[field] -= cost
                 per_spot.append(spot_best)
                 if best is None or spot_best["score"] > best["score"]:
                     best = spot_best
             if time.monotonic() - started > time_limit:
                 break
 
-        if best is None or best["meals"] <= 0:
+        staff_report = None
+        if features["staff"]:
+            staff_report = {"employees": employees, "crew_used": crew, "capacity": capacity, "wage": (you.get("staff") or {}).get("wage"), "wages": round(wages, 2),
+                            "target": ((you.get("staff") or {}).get("target")),
+                            "idle_days": ((you.get("staff") or {}).get("idle_days")),
+                            "unemployed": (state.get("labor") or {}).get("unemployed"),
+                            "poached": [p for p in state.get("poaching") or []
+                                        if p.get("from") == you.get("id") or p.get("to") == you.get("id")]}
+        skip = False
+        if crew is not None and crew <= 0:
+            fallback = best["spot"] if best else (spots[0] if spots else None)
+            order = {"spot": fallback, "price": 10.0, "quality": "standard", "meals": 0}
+            best = best or {"expected_sold": 0.0, "expected_profit": 0.0, "p_loss": 0.0, "expected_loss": 0.0}
+        elif best is None or best["meals"] <= 0:
             return None, None
-        order = {"spot": best["spot"], "price": best["price"], "quality": best["quality"], "meals": int(best["meals"])}
+        else:
+            idle = ((you.get("staff") or {}).get("idle_days")) or 0
+            ordered_yesterday = (state.get("last_you") or {}).get("status") != "no_order"
+            # A day that cannot cover its wages is better skipped, but never two in a row (the crew would leave).
+            if features["staff"] and best["expected_profit"] < -5.0 and not idle and ordered_yesterday \
+                    and laws is None:
+                skip = True
+                warnings.append("skipping tomorrow: expected profit {:.2f} after wages".format(best["expected_profit"]))
+            order = {"spot": best["spot"], "price": best["price"], "quality": best["quality"],
+                     "meals": int(best["meals"])}
+            if features["food"]:
+                order["food"] = best.get("food") or "meat"
+            if capacity is not None and order["meals"] >= int(capacity) and \
+                    int(budget // float(costs[order["quality"]])) > int(capacity):
+                warnings.append("staff capacity {} limits meals below what the order could use".format(int(capacity)))
+        politics = state.get("politics") or {}
+        election = politics.get("election") or {}
         report = {
             "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "mode": mode, "market": market, "day": day, "order": order, "features": features,
@@ -1083,9 +1557,17 @@ class Agent:
             "risk_weight": round(risk, 2), "losing_streak": streak,
             "days_left": days_left, "surprise": round(self.surprise, 3), "phantom": round(phantom, 3),
             "forecast_bias": round(math.exp(ratio_mean), 3), "forecast_noise": round(ratio_sd, 3),
+            "skip": skip, "warnings": warnings,
+            "staff": staff_report,
+            "politics": {"laws": policy["kinds"], "holder": (politics.get("office") or {}).get("holder"),
+                         "crisis": (politics.get("office") or {}).get("crisis"),
+                         "election": election.get("id"), "vote_day": election.get("vote_day"),
+                         "vote": you.get("vote"), "tally": election.get("tally")},
+            "planned": planned, "coupons_unused": unused, "riots": riots,
             "alternatives": [{field: (round(row[field], 2) if isinstance(row[field], float) else row[field])
                               for field in ("spot", "quality", "price", "meals", "expected_sold",
-                                            "expected_profit", "p_loss", "rep_bonus", "score", "forecast")}
+                                            "expected_profit", "p_loss", "rep_bonus", "score", "forecast",
+                                            "move_cost", "food", "riot_cost") if field in row}
                              for row in sorted(per_spot, key=lambda r: -r["score"])],
             "rivals": rivals_report,
             "rival_profiles": [{"name": p["name"], "quality": p["quality"], "price": p["price"],
@@ -1096,13 +1578,116 @@ class Agent:
             "checks": (self.model.get("checks") or [])[-10:],
             "rejected_days": self.rejected[-5:],
             "settings": {"spots": spots, "prefer": prefer, "rival_hints": settings.get("rival_hints") or {},
-                         "extra_caution": caution or 0},
+                         "extra_caution": caution or 0, "vote": settings.get("vote") or "auto"},
             "elapsed_ms": round((time.monotonic() - started) * 1000),
         }
-        self.last_report = report
-        if self.persist:
-            self._write_json(self.plan_path, report)
+        if record:
+            self.last_report = report
+            if self.persist:
+                self._write_json(self.plan_path, report)
         return order, report
+
+    # ---------- voting ----------
+
+    @staticmethod
+    def win_odds(candidates, tally, unvoted, ours, samples=400, turnout=0.7, seed=7):
+        """Chance each candidate wins when our vote is `ours` (None: abstain) and the rest vote as follows.
+
+        `tally` counts the votes already cast by others; each of `unvoted` other trucks still votes with
+        chance `turnout`, for a candidate picked at random. Ties are settled by a draw."""
+        rng = random.Random(seed)
+        odds = {c: 0.0 for c in candidates}
+        for _ in range(samples):
+            counts = {c: float(tally.get(c, 0)) for c in candidates}
+            for _n in range(unvoted):
+                if rng.random() < turnout:
+                    counts[rng.choice(candidates)] += 1
+            if ours in counts:
+                counts[ours] += 1
+            top = max(counts.values())
+            leaders = [c for c in candidates if counts[c] == top]
+            for c in leaders:
+                odds[c] += 1.0 / len(leaders) / samples
+        return odds
+
+    def vote_decision(self, state, time_limit=0.6):
+        """Who to vote for during a campaign, or None to abstain: {"choice", "reason", "candidates", ...}.
+
+        Each candidate's laws are tried on tonight's best few spots to see what they do to our daily profit.
+        A vote only moves the result when it is close, and protesters target the trucks that voted for the
+        office holder, so the default is to abstain unless a vote's expected gain clearly beats the protest cost."""
+        started = time.monotonic()
+        cleaned = self._clean_state(state)
+        features = cleaned["features"]
+        election = (cleaned["politics"] or {}).get("election")
+        setting = self.settings().get("vote", "auto")
+        info = {"choice": None, "reason": "no campaign", "candidates": [], "setting": setting}
+        if not features["elections"] or not election or len(election["candidates"]) < 2:
+            return info
+        ids = [c["id"] for c in election["candidates"]]
+        if setting == "abstain":
+            info["reason"] = "settings: abstain"
+            return info
+        if setting in ids:
+            info.update(choice=setting, reason="settings: candidate {}".format(setting))
+            return info
+        key = (cleaned["mode"], cleaned["market"], election["id"],
+               None if cleaned["mode"] == "final" else tuple(sorted(election["tally"].items())))
+        cached = self._vote_cache.get(key)
+        if cached is not None:
+            return dict(cached, setting=setting)
+        you = cleaned["you"]
+        # What each candidate's laws do to our expected daily profit, on the spots we would actually consider.
+        _, base = self.plan(state, time_limit=time_limit / 3, record=False)
+        if not base:
+            info["reason"] = "no baseline plan"
+            return info
+        top = [row["spot"] for row in base["alternatives"][:3]]
+        profit = {}
+        for candidate in election["candidates"]:
+            _, report = self.plan(state, time_limit=time_limit / 3, laws=candidate["policies"], only=top,
+                                  record=False)
+            profit[candidate["id"]] = report["expected_profit"] if report else 0.0
+        day_profit = base["expected_profit"]
+        revenue = base["expected_sold"] * float(base["order"]["price"])
+        days = cleaned["days"] or 30
+        term = max(0, min(TERM_DAYS, days - int(election["vote_day"] or cleaned["day"] or 0)))
+        own = you["vote"] if you["vote"] in ids else None
+        tally = dict(election["tally"])
+        if own:
+            tally[own] = max(0, tally.get(own, 0) - 1)
+        unvoted = max(0, len(cleaned["trucks"]) - 1 - int(sum(tally.values())))
+        abstain = self.win_odds(ids, tally, unvoted, None)
+        cash = {t["id"]: t.get("cash") for t in cleaned["trucks"]}
+        rows = []
+        for candidate in election["candidates"]:
+            cid = candidate["id"]
+            voted = self.win_odds(ids, tally, unvoted, cid)
+            value = term * sum((voted[k] - abstain[k]) * profit[k] for k in ids)
+            # Protesters pick a voter of the office holder, usually the one that earned the most.
+            voters = [t for t, v in election["votes"].items() if v == cid and t != you["id"]]
+            richest = all((cash.get(t) or 0) <= (you.get("cash") or 0) for t in voters)
+            others = unvoted * 0.7 / len(ids)
+            v = len(voters) + others + 1
+            p_target = 0.6 * (1.0 if richest else 0.1) / (1.0 + others) + 0.4 / v
+            protest = term * 0.33 * p_target * PROTEST_SHARE * revenue
+            net = value - voted[cid] * protest
+            rows.append({"id": cid, "name": candidate["name"], "daily_profit": round(profit[cid], 2),
+                         "p_win_if_abstain": round(abstain[cid], 3), "p_win_if_vote": round(voted[cid], 3),
+                         "gain": round(value, 2), "protest_cost": round(voted[cid] * protest, 2),
+                         "net": round(net, 2)})
+        margin = max(20.0, 0.05 * term * max(0.0, day_profit))
+        best = max(rows, key=lambda r: r["net"])
+        info.update(candidates=rows, margin=round(margin, 2), term_days=term,
+                    elapsed_ms=round((time.monotonic() - started) * 1000))
+        if best["net"] > margin:
+            info.update(choice=best["id"], reason="expected gain {:.0f} beats protest risk and margin".format(best["net"]))
+        else:
+            info["reason"] = "abstain: best net gain {:.0f} is under the margin {:.0f}".format(best["net"], margin)
+        if len(self._vote_cache) > 50:
+            self._vote_cache.clear()
+        self._vote_cache[key] = dict(info)
+        return info
 
     # ---------- scenarios ----------
 
@@ -1121,18 +1706,43 @@ class Agent:
         return {int(round(c / w)): w / total for c, w in groups if w > 0}
 
     @staticmethod
-    def _lineups(profiles, spots, key, samples, rng):
-        """Sample which rivals share each spot, and which of them cut their price on arriving."""
+    def _lineups(profiles, spots, key, samples, rng, planned=None):
+        """Sample which rivals share each spot, and which of them cut their price on arriving.
+
+        `planned` ({spot: orders in so far}, ours excluded) pins that many rivals to each spot, chosen by how
+        likely they are to be there; the rivals still to order are placed as usual, fewer of them as orders
+        come in."""
         lineups = {spot: {} for spot in spots}
+        expected_total = sum(sum(p[key].values()) for p in profiles)
+
+        def place(placed, profile, spot):
+            cut = profile["cut_chance"] if profile["last"] and profile["last"] != spot else 0.0
+            placed[spot].append((profile["id"], rng.random() < cut))
+
         for _ in range(samples):
             placed = {spot: [] for spot in spots}
-            for profile in profiles:
+            free = list(profiles)
+            scale = 1.0
+            if planned:
+                for spot in spots:
+                    for _n in range(min(int(planned.get(spot) or 0), len(free))):
+                        weights = [max(1e-3, p[key].get(spot, 0.0)) for p in free]
+                        roll = rng.random() * sum(weights)
+                        index = 0
+                        for index, weight in enumerate(weights):
+                            roll -= weight
+                            if roll <= 0:
+                                break
+                        place(placed, free.pop(index), spot)
+                committed = sum(len(v) for v in placed.values())
+                remaining = sum(sum(p[key].values()) for p in free)
+                scale = min(1.0, max(0.0, expected_total - committed) / remaining) if remaining > 0 else 0.0
+            for profile in free:
                 roll = rng.random()
                 for spot in spots:
-                    roll -= profile[key].get(spot, 0.0)
+                    roll -= profile[key].get(spot, 0.0) * scale
                     if roll < 0:
-                        cut = profile["cut_chance"] if profile["last"] and profile["last"] != spot else 0.0
-                        placed[spot].append((profile["id"], rng.random() < cut))
+                        place(placed, profile, spot)
                         break
             for spot in spots:
                 lineup = tuple(sorted(placed[spot]))
@@ -1140,11 +1750,11 @@ class Agent:
         return lineups
 
     @staticmethod
-    def _scenarios(lineups, crowd_points, pop, spot, reps, by_id, values, temperature):
+    def _scenarios(lineups, crowd_points, pop, spot, reps, by_id, values, temperature, policy=None, diets=None):
         """Each likely rival lineup at each crowd size: (rivals, crowd tables, weight)."""
         kept = sorted(lineups.items(), key=lambda item: -item[1])[:MAX_LINEUPS]
         kept_weight = sum(weight for _, weight in kept) or 1.0
-        tables = {count: crowd_tables(count, pop) for count in crowd_points}
+        tables = {count: crowd_tables(count, pop, diets) for count in crowd_points}
         scenarios = []
         for lineup, lineup_weight in kept:
             trucks = []
@@ -1153,15 +1763,17 @@ class Agent:
                 rep = (reps.get(truck_id) or {}).get(spot, 50.0)
                 quality = profile["quality"]
                 price = round(profile["price"] * (1.0 - profile["cut_size"]), 2) if cut else profile["price"]
+                price = charged_price(price, policy) if policy else price
                 value = float(values.get(quality, DEFAULT_VALUES[quality])) * rep_factor(rep) - price
                 trucks.append({"id": truck_id, "price": price, "qi": QUALITIES.index(quality), "value": value,
-                               "w": choice_weight(value, temperature), "meals": profile["meals"]})
+                               "w": choice_weight(value, temperature), "meals": profile["meals"],
+                               "food": profile.get("food") or "meat"})
             for count, crowd_weight in crowd_points.items():
                 scenarios.append((trucks, tables[count], lineup_weight / kept_weight * crowd_weight, count))
         return scenarios
 
     @staticmethod
-    def _walkers(model, lineups, spots):
+    def _walkers(model, lineups, spots, metres=distance):
         """Expected hungry customers from other spots who walk to each spot and could buy from us.
 
         A hungry customer walks to the nearest other spot with a truck they would buy from, with
@@ -1182,22 +1794,22 @@ class Agent:
             for origin in spots:
                 if origin == spot:
                     continue
-                reach = WALK_BASE * math.exp(-distance(origin, spot) / WALK_SCALE)
+                reach = WALK_BASE * math.exp(-metres(origin, spot) / WALK_SCALE)
                 nearest = 1.0
                 for other in spots:
-                    if other not in (origin, spot) and distance(origin, other) < distance(origin, spot):
+                    if other not in (origin, spot) and metres(origin, other) < metres(origin, spot):
                         nearest *= 1.0 - occupied[other]
                 total += hungry[origin] * reach * nearest
             inflow[spot] = total * WALK_ACCEPT
         return inflow
 
     @staticmethod
-    def _points(scenarios, price, our_value, qi, temperature, inflow=0.0):
+    def _points(scenarios, price, our_value, qi, temperature, inflow=0.0, food=None, capacity=None):
         """Meals we could sell in each scenario at this price (with walk-ins), with the scenario's weight."""
         if our_value < 0:
             return [(0.0, weight) for _, _, weight, _ in scenarios]
         ours = {"price": price, "qi": qi, "value": our_value, "w": choice_weight(our_value, temperature),
-                "meals": 1e9}
+                "meals": 1e9, "food": food or "meat"}
         points = []
         for trucks, tables, weight, count in scenarios:
             sold, left = allocate(tables, trucks + [ours])
@@ -1205,14 +1817,15 @@ class Agent:
             if inflow > 0:
                 # Walkers arrive last and buy only what is left; we share them with rivals still in stock.
                 others = sum(t["w"] for t, rest in zip(trucks, left) if rest > 0.5)
-                accepting = sum(_tail(tables[q], price) for q in range(qi + 1))
-                total = sum(_tail(tables[q], 0.0) for q in range(3)) or 1.0
+                groups = groups_of(tables)
+                accepting = sum(_tail(group[q], price) for diet, group in groups if eats(diet, ours)
+                                for q in range(qi + 1))
+                total = sum(_tail(group[q], 0.0) for _, group in groups for q in range(3)) or 1.0
                 demand += inflow * min(1.0, accepting / total) * ours["w"] / (ours["w"] + others)
-            points.append((demand, weight))
+            points.append((min(demand, capacity) if capacity is not None else demand, weight))
         return points
 
-    def _reputation_bonus(self, spot, quality, price, candidate, scenarios, inflow, temperature, base_value,
-                          cost, max_meals, risk, salvage, own_rep, days_left, state):
+    def _reputation_bonus(self, spot, quality, price, candidate, evaluate, base_value, own_rep, days_left, state):
         """Worth today of the reputation this order builds at this spot, over the days left.
 
         A rival cannot profitably undercut a high reputation, so a point of reputation is worth the extra
@@ -1225,9 +1838,7 @@ class Agent:
         higher = min(100.0, rep + 10.0)
         if gain == 0 or higher <= rep:
             return 0.0
-        value = base_value * rep_factor(higher)
-        points = self._points(scenarios, price, value - price, QUALITIES.index(quality), temperature, inflow)
-        raised = self._best_meals(points, price, cost, max_meals, risk, salvage, fixed_meals=candidate["meals"])
+        raised = evaluate(price, base_value * rep_factor(higher), fixed_meals=candidate["meals"])
         if raised is None:
             return 0.0
         slope = (raised["objective"] - candidate["objective"]) / (higher - rep)
@@ -1238,29 +1849,40 @@ class Agent:
         return REP_TRUST * stay * slope * gain * days
 
     @staticmethod
-    def _best_meals(points, price, cost, max_meals, risk, salvage=0.0, fixed_meals=None):
+    def _best_meals(points, price, cost, max_meals, risk, salvage=0.0, fixed_meals=None, fixed=0.0, top=None):
         """Newsvendor choice of meals, cooked a little leaner when recent days lost money.
 
-        With salvage, unsold meals refund part of their cost: the same as selling at a lower price
-        for a lower effective food cost."""
+        `price` is what a sold meal nets (after coupons and per-meal taxes). With salvage, unsold meals
+        refund part of their cost: the same as selling at a lower price for a lower effective food cost.
+        `fixed` is the day's wages, moving cost and fees; `top` = (threshold, rate) taxes (or, if rate is
+        negative, tops up) revenue above the threshold."""
         points = [(min(float(demand), float(max_meals)), weight) for demand, weight in points if weight > 0]
         total = sum(weight for _, weight in points)
         net_price, net_cost = price - salvage * cost, cost * (1.0 - salvage)
         if total <= 0 or net_price <= net_cost:
             return None
         points.sort()
-        shaded = net_price / (1 + risk * 0.5)
-        best_m, best_value = 0, 0.0
-        below, below_weight = 0.0, 0.0
-        for demand, weight in points:
-            meals = int(demand)
-            above_weight = total - below_weight
-            sold = (below + meals * above_weight) / total
-            value = shaded * sold - net_cost * meals
-            if value > best_value:
-                best_m, best_value = meals, value
-            below += demand * weight
-            below_weight += weight
+
+        def choose(net_price):
+            shaded = net_price / (1 + risk * 0.5)
+            best_m, best_value = 0, 0.0
+            below, below_weight = 0.0, 0.0
+            for demand, weight in points:
+                meals = int(demand)
+                above_weight = total - below_weight
+                sold = (below + meals * above_weight) / total
+                value = shaded * sold - net_cost * meals
+                if value > best_value:
+                    best_m, best_value = meals, value
+                below += demand * weight
+                below_weight += weight
+            return best_m
+
+        best_m = choose(net_price)
+        if top and best_m > 0:
+            # Revenue above the threshold is taxed: sell-outs there earn a little less per meal.
+            share = sum(weight for demand, weight in points if price * min(best_m, demand) > top[0]) / total
+            best_m = choose(net_price - top[1] * price * share)
         if fixed_meals is not None:
             best_m = int(fixed_meals)
         if best_m <= 0:
@@ -1268,7 +1890,9 @@ class Agent:
         sold_total = profit_total = loss_total = loss_chance = sell_chance = 0.0
         for demand, weight in points:
             sold = min(best_m, demand)
-            profit = net_price * sold - net_cost * best_m
+            profit = net_price * sold - net_cost * best_m - fixed
+            if top:
+                profit -= top[1] * max(0.0, price * sold - top[0])
             sold_total += sold * weight
             profit_total += profit * weight
             if profit < 0:
