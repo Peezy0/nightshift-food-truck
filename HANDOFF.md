@@ -87,6 +87,30 @@ Edit `agent-settings.json` while the bot runs; it is re-read within about 25 sec
 
 Press `Ctrl+C` in the `run.py` terminal; it stops the bot too. Never leave a stray `python3 bot.py` running alongside it.
 
+## How the profit agent decides
+
+`agent.py` runs inside the bot every night; it calls no AI model and costs nothing to run.
+
+1. **Learns** from every completed day: what each spot's customers pay (fitted to every truck's sales), how far the forecast misses, and each rival's habits (usual spots, whether it chases the day's announced top earner, prices, quality, reputation).
+2. **Simulates** about a thousand orders (6 spots × 3 qualities × many prices) against ~64 sampled rival lineups and the weather odds, using the published customer rules. It reads `state.features` every night, so it follows whichever rules are live (fair choice, walk over, salvage).
+3. **Orders** the best risk-adjusted option and logs its prediction. After the day, it compares prediction with result.
+
+The dashboard's Profit agent panel shows all of this. If the agent ever fails, `bot.py` falls back to a simple heuristic so a night is never missed.
+
+## How we work on it (with Claude Code)
+
+- **Never edit `agent.py` in the running folder to experiment.** The live bot reloads it within ~25 seconds, so a half-finished edit goes straight into play. Experiment in a separate copy (`git worktree add --detach ../lab HEAD`), and copy it over only once it wins.
+- **Prove changes before deploying.** Compare the current and new agent on the same practice seeds (`python3 bot.py --practice --seed S --days 30 --log logs/x.jsonl`, then `python3 analyze.py logs/x.jsonl`). Practice is limited to 10 markets per hour per truck, and practice data can be deliberately bad: check `data_quality` at the end of each market.
+- **Use live losses as test cases.** Days 7, 10, 13 and 16 each exposed a flaw (empty-spot bets, chasers undercutting, pricing above the field, three-way splits). New versions must handle them.
+- **Steer with `agent-settings.json`,** not code, for quick team knowledge (rival hints, spots to avoid).
+- **To save credits,** delegate long build-and-test jobs to a cheaper model (we used Claude Sonnet subagents) and keep the main session for reviewing results and deciding what ships.
+- **Read the docs again when rules change.** The organizers change rules mid-night (announced on the TV and in `state.announcements`); the docs at https://nightshift.joinbuilders.org/kitchen-e551e5/ are the source of truth.
+- **Freeze at 6 AM.** No code changes after that; the final starts at 8:30 AM. Live days don't count toward the ranking; only the final's average profit per market does.
+
+## Switching computers
+
+Only one bot may run for the truck. The handover must fit inside one day phase (5 minutes since day 15): the old bot stops right after that night's order is in, and the new one starts before the next night opens. If it misses, the truck sits out one live day, which doesn't count toward the final.
+
 ## If something looks wrong
 
 - Dashboard says the snapshot is stale: check the `run.py` terminal and `logs/bot.out`.
