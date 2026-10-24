@@ -72,3 +72,7 @@ The agent scores every allowed spot each night by expected profit, chance of a l
 ### Watchdog
 
 `python3 run.py` keeps one live bot running: it restarts the bot if it exits and whenever `bot.py` changes, and writes the bot's output to `logs/bot.out`. It reads the key from `NIGHTSHIFT_KEY` or, if that is unset, from `~/.nightshift-key` (outside the repo). Run it instead of `python3 bot.py`, never alongside another bot for the same truck.
+
+### Sharing learned data
+
+`python3 sync_data.py` runs in the background on the computer with the live bot: after each live order it copies the agent's learned files into `data/` and pushes them, so a teammate's fresh clone starts with up-to-date history. It only commits `data/`, skips the final, and refuses to push anything that looks like a key. Run it on one computer at a time.
