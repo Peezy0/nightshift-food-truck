@@ -32,11 +32,29 @@ class StrategyTests(unittest.TestCase):
         self.state["rules"]["spots"] = ["union"]
         order = decide(self.state)
         self.assertLessEqual(order["meals"], 25)
+        self.assertEqual(order["quality"], "premium")
+        self.assertEqual(order["price"], 10.0)
 
     def test_no_event_does_not_penalize_open_spot(self):
         self.state["forecast"]["events"] = []
         self.assertEqual(estimate_rivals(self.state, "northres"), 0)
         self.assertEqual(decide(self.state)["spot"], "union")
+
+    def test_high_forecast_with_many_trucks_does_not_trigger_large_order(self):
+        self.state["forecast"] = {
+            "expected_customers": {"highst": 152, "northres": 97},
+            "crowds": {"highst": "high", "northres": "medium"},
+            "events": [],
+        }
+        self.state["last_day"]["spots"] = {
+            "highst": {"trucks": []}, "northres": {"trucks": []},
+        }
+        self.state["rules"]["spots"] = ["highst", "northres"]
+        self.assertEqual(estimate_rivals(self.state, "highst"), 3)
+        order = decide(self.state)
+        self.assertEqual(order["spot"], "northres")
+        self.assertEqual(order["quality"], "standard")
+        self.assertLessEqual(order["meals"], 50)
 
 
 if __name__ == "__main__":

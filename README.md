@@ -13,7 +13,7 @@ python3 bot.py
 
 The first command runs a private 30-day practice game. The second stays connected to the live game and the final. Leave it running. If you edit the strategy, restart the bot. Use `--seed same-name` for comparable practice runs.
 
-The bot reads the forecast, estimates competition from the previous day, chooses a spot, and orders standard meals at $9.50. It treats announced event spots as likely to attract other trucks, even when they were quiet the previous day, and limits production because unsold meals still cost money. This is a risk estimate, not a guarantee: compare later live results and practice runs before changing it further. Each nightly order can be replaced until the night ends.
+The bot reads the forecast, estimates competition from the previous day and the coming day's crowd, then chooses a spot. It orders standard meals at $9.50 in a spot expected to be empty, or premium meals at $10 when rivals are expected. It caps production at 50 meals because unsold meals still cost money. The crowding and sales estimates are uncertain: compare later live results and practice runs before changing them further. Each nightly order can be replaced until the night ends.
 
 ## Logs and improvement loop
 

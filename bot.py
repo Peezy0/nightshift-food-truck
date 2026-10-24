@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import statistics
 import sys
 import time
 import urllib.error
@@ -127,18 +128,25 @@ def request(method, url, key, payload=None, timeout=30):
 
 
 def estimate_rivals(state, spot):
-    """Allow for teams converging on the same announced event."""
+    """Allow for teams converging on an event or unusually busy spot."""
     previous = (state.get("last_day") or {}).get("spots") or {}
     own_id = (state.get("you") or {}).get("id")
     recent = sum(truck.get("id") != own_id for truck in
                  (previous.get(spot) or {}).get("trucks") or [])
-    events = (state.get("forecast") or {}).get("events") or []
-    if not any(event.get("spot") == spot for event in events):
-        return recent
+    forecast = state.get("forecast") or {}
+    events = forecast.get("events") or []
     market_rivals = max(0, len(state.get("trucks") or []) - 1)
-    # A public concert forecast attracted five of six rivals in the live market.
-    # Estimate a majority, but never more rivals than the market contains.
-    return max(recent, math.ceil(market_rivals * 0.65))
+    projected = 0
+    if any(event.get("spot") == spot for event in events):
+        # A public concert forecast attracted five of six rivals in live play.
+        projected = math.ceil(market_rivals * 0.65)
+    expected = forecast.get("expected_customers") or {}
+    values = [float(value) for value in expected.values() if value is not None]
+    if (values and (forecast.get("crowds") or {}).get(spot) == "high"
+            and float(expected.get(spot) or 0) >= statistics.median(values) * 1.2):
+        # Even without an event, the top forecast drew a premium rival on day 4.
+        projected = max(projected, math.ceil(market_rivals * 0.4))
+    return max(recent, projected)
 
 
 def decide(state):
@@ -160,14 +168,16 @@ def decide(state):
         if score > best_score:
             best_score, best_spot = score, spot
 
-    quality = "standard"
-    price = max(float(rules.get("price_min", 1)), min(9.5, float(rules.get("price_max", 30))))
-    # Unsold meals spoil. Estimate our share, then leave a modest buffer.
     predicted_rivals = estimate_rivals(state, best_spot)
+    # Standard food worked alone; premium rivals won most contested customers.
+    quality = "premium" if predicted_rivals and "premium" in (rules.get("qualities") or QUALITY_COST) else "standard"
+    target_price = 10.0 if quality == "premium" else 9.5
+    price = max(float(rules.get("price_min", 1)), min(target_price, float(rules.get("price_max", 30))))
+    # Unsold meals spoil. Avoid committing most of the daily budget to one guess.
     likely_sales = float(expected.get(best_spot) or 60) / (1 + 1.2 * predicted_rivals)
     cost = float((rules.get("costs") or {}).get(quality, QUALITY_COST[quality]))
     budget = float(rules.get("budget", 500))
-    meals = min(int(budget // cost), max(15, round(likely_sales * 0.75)))
+    meals = min(int(budget // cost), 50, max(12, round(likely_sales * 0.75)))
     return {"spot": best_spot, "price": price, "quality": quality, "meals": meals}
 
 
