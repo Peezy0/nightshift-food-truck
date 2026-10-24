@@ -68,3 +68,7 @@ Read the [game rules](https://nightshift.joinbuilders.org/kitchen-e551e5/#/rules
 ### Steering the agent without a restart
 
 The agent scores every allowed spot each night by expected profit, chance of a loss, and the reputation it would build, using its predictions of where rivals will park. To add what you know, edit `agent-settings.json` while the bot runs: limit or `avoid` spots, add a dollar bonus to `prefer` a spot, tell it where a rival will be with `rival_hints`, or raise `extra_caution`. The bot notices the change within about 25 seconds and replans that night's order. Edits to `agent.py` also load automatically; if the new code fails to load, the bot keeps the version that was running. Changes to `bot.py` itself still need a restart.
+
+### Watchdog
+
+`python3 run.py` keeps one live bot running: it restarts the bot if it exits and whenever `bot.py` changes, and writes the bot's output to `logs/bot.out`. It reads the key from `NIGHTSHIFT_KEY` or, if that is unset, from `~/.nightshift-key` (outside the repo). Run it instead of `python3 bot.py`, never alongside another bot for the same truck.

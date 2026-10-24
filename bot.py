@@ -383,6 +383,11 @@ def main():
     args = parser.parse_args()
     key = os.environ.get("NIGHTSHIFT_KEY")
     if not key:
+        try:
+            key = (Path.home() / ".nightshift-key").read_text(encoding="utf-8").strip()
+        except OSError:
+            key = None
+    if not key:
         parser.error("Set NIGHTSHIFT_KEY to your truck key before running the bot")
     log_path = args.log
     if log_path is None:
