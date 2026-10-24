@@ -59,6 +59,8 @@ REP_WEIGHT = 0.35          # share of the future reputation payoff counted today
 REP_HORIZON = 6            # days of future sales a reputation gain is credited for
 BASE_RISK = 0.3            # weight on expected loss in the objective
 RISK_PER_LOSS = 0.25       # extra caution after each consecutive losing day
+HOME_WEIGHT = 0.6          # share of a rival's moves that return to spots it has used before
+SURPRISE = 0.3             # share of a rival's location spread evenly over every spot
 
 
 def _event_kind(event):
@@ -495,11 +497,13 @@ class Agent:
                 busiest = max(forecast_record["expected"], key=lambda s: float(forecast_record["expected"].get(s) or 0))
             for truck_id in set(where) | set(before):
                 entry = stats.setdefault(truck_id, {"seen": 0, "active": 0, "stay_n": 0, "stay_k": 0,
-                                                    "move_n": 0, "event_k": 0, "event_n": 0, "top_k": 0})
+                                                    "move_n": 0, "event_k": 0, "event_n": 0, "top_k": 0,
+                                                    "spots": {}})
             for truck_id, entry in stats.items():
                 entry["seen"] += 1
                 if truck_id in where:
                     entry["active"] += 1
+                    entry["spots"][where[truck_id]] = entry["spots"].get(where[truck_id], 0) + 1
                 if truck_id in where and truck_id in before:
                     entry["stay_n"] += 1
                     if where[truck_id] == before[truck_id]:
@@ -528,12 +532,13 @@ class Agent:
                 continue
             # A truck absent from every recorded day has been idle for all of them.
             entry = stats.get(truck_id, {"seen": len(relevant), "active": 0, "stay_n": 0, "stay_k": 0,
-                                          "move_n": 0, "event_k": 0, "event_n": 0, "top_k": 0})
+                                          "move_n": 0, "event_k": 0, "event_n": 0, "top_k": 0, "spots": {}})
             active = (entry["active"] + 2.0) / (entry["seen"] + 2.5)
             if (entry["seen"] >= 3 and entry["active"] == 0) or "deleted" in str(truck.get("truck_name")).lower():
                 active = 0.02  # Never shows up: a deleted or idle team.
             stay = (entry["stay_k"] + 1.0) / (entry["stay_n"] + 2.0)
-            event_rate = (entry["event_k"] + 1.5) / (entry["event_n"] + 2.5)
+            # Live day 7: the concert drew only two trucks, not five as on day 3.
+            event_rate = (entry["event_k"] + 1.0) / (entry["event_n"] + 3.0)
             top_rate = (entry["top_k"] + 0.6) / (entry["move_n"] + 2.0)
             weights = {spot: max(1.0, expected.get(spot, 0)) ** 1.5 for spot in spots}
             spread = sum(weights.values()) or 1.0
@@ -548,6 +553,14 @@ class Agent:
                 share = min(top_rate, max(0.0, leftover))
                 mix[top_spot] += share
                 leftover -= share
+            visits = sum(entry["spots"].values())
+            if visits:
+                # Teams return to familiar spots (Wagyu Express: High Street on days 2, 5 and 7).
+                share = max(0.0, leftover) * HOME_WEIGHT
+                for spot, count in entry["spots"].items():
+                    if spot in mix:
+                        mix[spot] += share * count / visits
+                leftover -= share
             for spot in spots:
                 mix[spot] += max(0.0, leftover) * move[spot]
             where = {}
@@ -556,7 +569,9 @@ class Agent:
                     where[spot] = (1 - stay) * mix[spot] + (stay if spot == last_spot[truck_id] else 0.0)
             else:
                 where = dict(mix)
-            where = {spot: active * chance for spot, chance in where.items()}
+            # Any active team can surprise us; never treat a spot as certainly empty.
+            where = {spot: active * ((1 - SURPRISE) * chance + SURPRISE / len(spots))
+                     for spot, chance in where.items()}
             offer = latest_offer.get(truck_id) or {}
             quality = offer.get("quality") if offer.get("quality") in QUALITIES else "premium"
             profiles.append({
