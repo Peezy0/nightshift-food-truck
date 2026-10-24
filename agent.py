@@ -201,9 +201,10 @@ def _lookup(table, price, qi):
 class Agent:
     """Keeps day history and learned parameters on disk; plans one order per night."""
 
-    def __init__(self, folder, persist=True):
+    def __init__(self, folder, persist=True, spots=None):
         self.folder = Path(folder)
         self.persist = persist
+        self.spots = tuple(spots or ())
         self.history_path = self.folder / "agent-history.jsonl"
         self.model_path = self.folder / "agent-model.json"
         self.plan_path = self.folder / "agent-plan.json"
@@ -608,6 +609,8 @@ class Agent:
         started = time.monotonic()
         rules = state.get("rules") or {}
         spots = list(rules.get("spots") or SPOT_PRIORS.keys())
+        # The team can restrict where the truck parks; ignore a restriction that leaves nothing.
+        spots = [spot for spot in spots if spot in self.spots] or spots if self.spots else spots
         values = rules.get("values") or DEFAULT_VALUES
         costs = rules.get("costs") or DEFAULT_COSTS
         qualities = [q for q in (rules.get("qualities") or QUALITIES) if q in QUALITIES]

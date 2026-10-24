@@ -336,6 +336,8 @@ def main():
     parser.add_argument("--rivals", type=int, default=3, help="practice house bots")
     parser.add_argument("--seed", default=None, help="repeatable practice seed")
     parser.add_argument("--log", default=None, help="path to JSONL event log")
+    parser.add_argument("--spots", default="thompson,northres",
+                        help="comma-separated spots the agent may choose; 'all' for every spot")
     args = parser.parse_args()
     key = os.environ.get("NIGHTSHIFT_KEY")
     if not key:
@@ -348,7 +350,8 @@ def main():
     log = EventLog(log_path)
     log.write("run_started", mode="practice" if args.practice else "live", log_path=str(log.path))
     # Practice runs use house bots, so keep them out of the live history.
-    agent = Agent(log.path.parent, persist=not args.practice)
+    spots = None if args.spots.strip().lower() == "all" else [s.strip() for s in args.spots.split(",") if s.strip()]
+    agent = Agent(log.path.parent, persist=not args.practice, spots=spots)
     if args.practice:
         practice(key, args.days, args.rivals, args.seed, log, agent)
     else:
