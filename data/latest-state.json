@@ -1,16 +1,16 @@
 {
-  "observed_at": "2026-10-24T06:04:35.347831+00:00",
-  "version": 219,
+  "observed_at": "2026-10-24T06:08:47.395742+00:00",
+  "version": 220,
   "mode": "live",
   "market": 1,
   "markets": 1,
   "day": 27,
   "days": 65,
-  "phase": "day",
-  "phase_ends_at": "2026-10-24T06:05:00.000Z",
-  "server_time": "2026-10-24T06:04:35.278Z",
-  "orders_open": false,
-  "order_for_day": null,
+  "phase": "night",
+  "phase_ends_at": "2026-10-24T06:10:00.000Z",
+  "server_time": "2026-10-24T06:08:47.354Z",
+  "orders_open": true,
+  "order_for_day": 28,
   "rules": {
     "budget": 500,
     "costs": {
@@ -205,7 +205,12 @@
       "highst": 54.53,
       "northres": 50.97
     },
-    "order": null,
+    "order": {
+      "spot": "oval",
+      "price": 11.25,
+      "quality": "standard",
+      "meals": 133
+    },
     "last_spot": "oval",
     "staff": {
       "employees": 3,
