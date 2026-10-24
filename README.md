@@ -64,3 +64,7 @@ To update a running clone, wait until its current nightly order has been submitt
 - The final starts at 8:30 AM Eastern. The bot must already be running and answer each day in under 2 seconds.
 
 Read the [game rules](https://nightshift.joinbuilders.org/kitchen-e551e5/#/rules) and [API reference](https://nightshift.joinbuilders.org/kitchen-e551e5/#/api).
+
+### Steering the agent without a restart
+
+The agent scores every allowed spot each night by expected profit, chance of a loss, and the reputation it would build, using its predictions of where rivals will park. To add what you know, edit `agent-settings.json` while the bot runs: limit or `avoid` spots, add a dollar bonus to `prefer` a spot, tell it where a rival will be with `rival_hints`, or raise `extra_caution`. The bot notices the change within about 25 seconds and replans that night's order. Edits to `agent.py` also load automatically; if the new code fails to load, the bot keeps the version that was running. Changes to `bot.py` itself still need a restart.

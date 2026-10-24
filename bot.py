@@ -3,6 +3,7 @@
 
 import argparse
 import datetime
+import importlib
 import json
 import math
 import os
@@ -13,10 +14,13 @@ import time
 import urllib.error
 import urllib.request
 
+import agent as profit_agent
 from agent import Agent
 
 
 API = "https://nightshift.joinbuilders.org/api/v1"
+SETTINGS = Path(__file__).resolve().parent / "agent-settings.json"
+AGENT_SOURCE = Path(profit_agent.__file__).resolve()
 QUALITY_COST = {"cheap": 2.5, "standard": 3.75, "premium": 5.5}
 SPOTS = ("oval", "thompson", "union", "stadium", "highst", "northres")
 
@@ -266,12 +270,40 @@ def practice(key, days, rivals, seed, log, agent):
         float((state.get("you") or {}).get("cash") or 0)), flush=True)
 
 
+def watched_mtimes():
+    stamps = []
+    for path in (AGENT_SOURCE, SETTINGS):
+        try:
+            stamps.append(path.stat().st_mtime)
+        except OSError:
+            stamps.append(None)
+    return tuple(stamps)
+
+
+def reload_agent(agent, log):
+    """Load an edited agent.py into the running bot; keep the old agent if the new code fails."""
+    global profit_agent
+    try:
+        module = importlib.reload(profit_agent)
+        fresh = module.Agent(agent.folder, persist=agent.persist, spots=agent.spots,
+                             settings_path=agent.settings_path)
+    except Exception as error:  # A broken edit must not stop the bot.
+        log.write("agent_error", stage="reload", error_type=type(error).__name__, message=str(error)[:300])
+        print("Agent reload failed, keeping the running version: {}".format(error), file=sys.stderr, flush=True)
+        return agent
+    profit_agent = module
+    log.write("agent_reloaded")
+    print("Agent code reloaded.", flush=True)
+    return fresh
+
+
 def live(key, log, agent):
     version = 0
     seen_results = set()
     planned = {}
     sent = set()
     connected = False
+    watched = watched_mtimes()
     while True:
         try:
             url = API + "/state"
@@ -289,6 +321,16 @@ def live(key, log, agent):
             if last.get("day") is not None and result_id not in seen_results:
                 log_result(log, state)
                 seen_results.add(result_id)
+            stamps = watched_mtimes()
+            if stamps != watched:
+                # New strategy code or team settings: replan tonight's order with them.
+                if stamps[0] != watched[0]:
+                    agent = reload_agent(agent, log)
+                else:
+                    print("Agent settings changed; replanning.", flush=True)
+                watched = stamps
+                planned.clear()
+                sent.clear()
             observe_state(agent, state, log)
             if state.get("phase") == "night" and state.get("orders_open"):
                 day = state.get("order_for_day")
@@ -336,7 +378,7 @@ def main():
     parser.add_argument("--rivals", type=int, default=3, help="practice house bots")
     parser.add_argument("--seed", default=None, help="repeatable practice seed")
     parser.add_argument("--log", default=None, help="path to JSONL event log")
-    parser.add_argument("--spots", default="thompson,northres",
+    parser.add_argument("--spots", default="all",
                         help="comma-separated spots the agent may choose; 'all' for every spot")
     args = parser.parse_args()
     key = os.environ.get("NIGHTSHIFT_KEY")
@@ -351,7 +393,7 @@ def main():
     log.write("run_started", mode="practice" if args.practice else "live", log_path=str(log.path))
     # Practice runs use house bots, so keep them out of the live history.
     spots = None if args.spots.strip().lower() == "all" else [s.strip() for s in args.spots.split(",") if s.strip()]
-    agent = Agent(log.path.parent, persist=not args.practice, spots=spots)
+    agent = Agent(log.path.parent, persist=not args.practice, spots=spots, settings_path=SETTINGS)
     if args.practice:
         practice(key, args.days, args.rivals, args.seed, log, agent)
     else:

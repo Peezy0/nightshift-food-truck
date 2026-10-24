@@ -201,10 +201,11 @@ def _lookup(table, price, qi):
 class Agent:
     """Keeps day history and learned parameters on disk; plans one order per night."""
 
-    def __init__(self, folder, persist=True, spots=None):
+    def __init__(self, folder, persist=True, spots=None, settings_path=None):
         self.folder = Path(folder)
         self.persist = persist
         self.spots = tuple(spots or ())
+        self.settings_path = Path(settings_path) if settings_path else None
         self.history_path = self.folder / "agent-history.jsonl"
         self.model_path = self.folder / "agent-model.json"
         self.plan_path = self.folder / "agent-plan.json"
@@ -400,6 +401,17 @@ class Agent:
                     best, best_score = (shift, spread), score
                 index += 1
         return mu0 + best[0], best[1], mix, (entry or {}).get("n", 0)
+
+    def settings(self):
+        """Team overrides from agent-settings.json, re-read every plan; bad files are ignored."""
+        if not self.settings_path:
+            return {}
+        try:
+            with self.settings_path.open(encoding="utf-8") as source:
+                data = json.load(source)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
 
     def ratio_stats(self):
         stats = self.model["ratio"]
@@ -608,9 +620,16 @@ class Agent:
     def plan(self, state, time_limit=1.0):
         started = time.monotonic()
         rules = state.get("rules") or {}
-        spots = list(rules.get("spots") or SPOT_PRIORS.keys())
+        all_spots = list(rules.get("spots") or SPOT_PRIORS.keys())
+        settings = self.settings()
+        allowed = set(self.spots or all_spots)
+        if isinstance(settings.get("spots"), list):
+            allowed &= set(settings["spots"])
+        allowed -= set(settings.get("avoid") or [])
         # The team can restrict where the truck parks; ignore a restriction that leaves nothing.
-        spots = [spot for spot in spots if spot in self.spots] or spots if self.spots else spots
+        spots = [spot for spot in all_spots if spot in allowed] or all_spots
+        prefer = {spot: float(bonus) for spot, bonus in (settings.get("prefer") or {}).items()
+                  if isinstance(bonus, (int, float))}
         values = rules.get("values") or DEFAULT_VALUES
         costs = rules.get("costs") or DEFAULT_COSTS
         qualities = [q for q in (rules.get("qualities") or QUALITIES) if q in QUALITIES]
@@ -629,7 +648,17 @@ class Agent:
         rep_avg = {t.get("id"): t.get("reputation_avg") for t in state.get("trucks") or []}
         reps = self.reputations(mode, market, rep_avg=rep_avg)
         profiles = self.rival_profiles(state)
+        hints = {str(name).lower(): spot for name, spot in (settings.get("rival_hints") or {}).items()}
+        for profile in profiles:
+            hinted = hints.get(str(profile["name"]).lower())
+            if hinted in all_spots:
+                # A teammate's tip outweighs the learned pattern but still leaves room for error.
+                profile["where"] = {spot: 0.85 if spot == hinted else 0.15 / (len(all_spots) - 1)
+                                    for spot in all_spots}
         risk, streak = self.risk_weight(state)
+        caution = settings.get("extra_caution")
+        if isinstance(caution, (int, float)):
+            risk = max(0.0, risk + float(caution))
         ratio_mean, ratio_sd = self.ratio_stats()
 
         seed = (int(market or 0) * 1000 + day) * 7919 + len(profiles)
@@ -723,7 +752,7 @@ class Agent:
                     rep_bonus = REP_WEIGHT * gain * min(days_left, REP_HORIZON) * 45 * candidate["p_sell"]
                     candidate.update(spot=spot, quality=quality, price=round(price, 2),
                                      rep_bonus=round(rep_bonus, 2),
-                                     score=candidate["objective"] + rep_bonus)
+                                     score=candidate["objective"] + rep_bonus + prefer.get(spot, 0.0))
                     if spot_best is None or candidate["score"] > spot_best["score"]:
                         spot_best = candidate
                 if time.monotonic() - started > time_limit:
@@ -757,6 +786,8 @@ class Agent:
                                 "chance": round(max(p["where"].values()), 2) if p["where"] else 0}
                                for p in profiles],
             "checks": (self.model.get("checks") or [])[-10:],
+            "settings": {"spots": spots, "prefer": prefer, "rival_hints": settings.get("rival_hints") or {},
+                         "extra_caution": caution or 0},
             "elapsed_ms": round((time.monotonic() - started) * 1000),
         }
         self.last_report = report

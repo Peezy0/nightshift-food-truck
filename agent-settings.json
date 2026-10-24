@@ -1,0 +1,15 @@
+{
+  "_help": "The bot re-reads this file every night; no restart needed. Spots: oval, thompson, union, stadium, highst, northres.",
+  "spots": "all",
+  "avoid": [],
+  "prefer": {},
+  "rival_hints": {},
+  "extra_caution": 0,
+  "_examples": {
+    "spots": ["thompson", "northres", "union"],
+    "avoid": ["stadium"],
+    "prefer": {"thompson": 40},
+    "rival_hints": {"Wagyu Express": "highst", "Frontrun Fries": "oval"},
+    "extra_caution": 0.5
+  }
+}
