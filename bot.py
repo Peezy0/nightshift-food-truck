@@ -65,6 +65,7 @@ class EventLog:
             "orders_open": state.get("orders_open"),
             "order_for_day": state.get("order_for_day"),
             "rules": state.get("rules"),
+            "features": state.get("features"),
             "forecast": state.get("forecast"),
             "you": {field: you.get(field) for field in
                     ("id", "truck_name", "company_name", "cash", "reputation", "order")},
@@ -279,6 +280,11 @@ def practice(key, days, rivals, seed, log, agent):
         print("Day {}: {} | profit ${:.2f} | cash ${:.2f}".format(
             state.get("day"), order, float(result_line.get("profit") or 0),
             float((state.get("you") or {}).get("cash") or 0)), flush=True)
+    if state.get("data_quality"):
+        # Practice markets may serve deliberately bad data; keep a note of what it was.
+        log.write("data_quality", mode=state.get("mode"), market=state.get("market"),
+                  data_quality=state.get("data_quality"), rejected=getattr(agent, "rejected", [])[-5:])
+        print("Practice data quality: {}".format(state.get("data_quality")), flush=True)
     print("Practice complete. Final cash: ${:.2f}".format(
         float((state.get("you") or {}).get("cash") or 0)), flush=True)
 
