@@ -107,6 +107,10 @@ The dashboard's Profit agent panel shows all of this. If the agent ever fails, `
 - **Read the docs again when rules change.** The organizers change rules mid-night (announced on the TV and in `state.announcements`); the docs at https://nightshift.joinbuilders.org/kitchen-e551e5/ are the source of truth.
 - **Freeze at 6 AM.** No code changes after that; the final starts at 8:30 AM. Live days don't count toward the ranking; only the final's average profit per market does.
 
+## Using Claude Code
+
+Open Claude Code in this folder: it reads `CLAUDE.md`, which teaches it how this bot runs, the safety rules (one bot, never experiment on the live files, test before deploying) and how to deploy. It can also launch the `strategy-builder` subagent (`.claude/agents/strategy-builder.md`, runs on Sonnet to save credits) to build and test strategy changes in a separate copy. A good first message: "Read CLAUDE.md, check the bot is running, and start watching for rule changes."
+
 ## Watching for rule changes (with Claude Code)
 
 The organizers switch rules on and off during the night. The bot reads `state.features` every night, but a person (or Claude) should still check each change. To get alerted, open Claude Code in this folder and paste:
