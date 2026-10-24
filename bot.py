@@ -38,6 +38,45 @@ class EventLog:
                 print("Logging unavailable: {}".format(error), file=sys.stderr, flush=True)
                 self.warned = True
 
+    def save_state(self, state):
+        """Keep a readable latest-state snapshot beside the event log."""
+        you = state.get("you") or {}
+        last = state.get("last_day") or {}
+        snapshot = {
+            "observed_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "version": state.get("version"),
+            "mode": state.get("mode"),
+            "market": state.get("market"),
+            "markets": state.get("markets"),
+            "day": state.get("day"),
+            "days": state.get("days"),
+            "phase": state.get("phase"),
+            "phase_ends_at": state.get("phase_ends_at"),
+            "server_time": state.get("server_time"),
+            "orders_open": state.get("orders_open"),
+            "order_for_day": state.get("order_for_day"),
+            "rules": state.get("rules"),
+            "forecast": state.get("forecast"),
+            "you": {field: you.get(field) for field in
+                    ("id", "truck_name", "company_name", "cash", "reputation", "order")},
+            "last_day": {field: last.get(field) for field in
+                         ("day", "weather", "events", "spots", "you")},
+            "trucks": [{field: truck.get(field) for field in
+                        ("id", "truck_name", "company_name", "color", "cash", "reputation_avg")}
+                       for truck in state.get("trucks") or []],
+            "announcements": state.get("announcements") or [],
+        }
+        destination = self.path.parent / "latest-state.json"
+        temporary = self.path.parent / "latest-state.json.tmp"
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(json.dumps(snapshot, indent=2, default=str) + "\n", encoding="utf-8")
+            temporary.replace(destination)
+        except OSError as error:
+            if not self.warned:
+                print("Status snapshot unavailable: {}".format(error), file=sys.stderr, flush=True)
+                self.warned = True
+
 
 def log_decision(log, state, order):
     spot = order["spot"]
@@ -91,10 +130,12 @@ def decide(state):
     previous = (state.get("last_day") or {}).get("spots") or {}
     reputation = (state.get("you") or {}).get("reputation") or {}
     events = forecast.get("events") or []
+    rules = state.get("rules") or {}
+    spots = rules.get("spots") or SPOTS
 
-    best_spot = "union"
+    best_spot = spots[0]
     best_score = float("-inf")
-    for spot in SPOTS:
+    for spot in spots:
         customers = float(expected.get(spot) or 0)
         recent_trucks = (previous.get(spot) or {}).get("trucks") or []
         # Last day's rivals are only a hint; they may move tomorrow.
@@ -106,12 +147,14 @@ def decide(state):
             best_score, best_spot = score, spot
 
     quality = "standard"
-    price = 9.5
+    price = max(float(rules.get("price_min", 1)), min(9.5, float(rules.get("price_max", 30))))
     # Unsold meals spoil. Estimate our share, then leave a modest buffer.
     recent_rivals = sum(1 for truck in (previous.get(best_spot) or {}).get("trucks") or []
                         if truck.get("id") != (state.get("you") or {}).get("id"))
     likely_sales = float(expected.get(best_spot) or 60) / (1 + 1.2 * recent_rivals)
-    meals = min(int(500 // QUALITY_COST[quality]), max(15, round(likely_sales * 0.75)))
+    cost = float((rules.get("costs") or {}).get(quality, QUALITY_COST[quality]))
+    budget = float(rules.get("budget", 500))
+    meals = min(int(budget // cost), max(15, round(likely_sales * 0.75)))
     return {"spot": best_spot, "price": price, "quality": quality, "meals": meals}
 
 
@@ -157,21 +200,21 @@ def live(key, log):
             if last.get("day") is not None and result_id not in seen_results:
                 log_result(log, state)
                 seen_results.add(result_id)
-            if state.get("phase") != "night" or not state.get("orders_open"):
-                continue
-            day = state.get("order_for_day")
-            existing = (state.get("you") or {}).get("order")
-            if existing:
-                continue
-            order = decide(state)
-            log_decision(log, state, order)
-            started = time.monotonic()
-            request("POST", API + "/orders", key, order, timeout=5)
-            elapsed_ms = round((time.monotonic() - started) * 1000)
-            log.write("order_submitted", mode=state.get("mode"), market=state.get("market"),
-                      day=day, order=order, latency_ms=elapsed_ms)
-            print("{} market {} day {}: submitted {}".format(
-                state.get("mode"), state.get("market"), day, order), flush=True)
+            if state.get("phase") == "night" and state.get("orders_open"):
+                day = state.get("order_for_day")
+                existing = (state.get("you") or {}).get("order")
+                if not existing:
+                    order = decide(state)
+                    log_decision(log, state, order)
+                    started = time.monotonic()
+                    response = request("POST", API + "/orders", key, order, timeout=5)
+                    elapsed_ms = round((time.monotonic() - started) * 1000)
+                    log.write("order_submitted", mode=state.get("mode"), market=state.get("market"),
+                              day=day, order=order, latency_ms=elapsed_ms)
+                    (state.get("you") or {})["order"] = response.get("order") or order
+                    print("{} market {} day {}: submitted {}".format(
+                        state.get("mode"), state.get("market"), day, order), flush=True)
+            log.save_state(state)
         except KeyboardInterrupt:
             print("Stopping bot.", flush=True)
             return

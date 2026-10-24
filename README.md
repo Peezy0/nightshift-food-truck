@@ -23,7 +23,10 @@ While the live bot is running, open another VS Code terminal in this folder to i
 
 ```sh
 python3 analyze.py
+python3 status.py
 ```
+
+`analyze.py` summarizes finished days. `status.py` explains the latest state captured by the running bot: version, mode, market and day, phase and server clock, order window, rules, forecast, your truck and current order, the entire last day's spot results, trucks, and announcements. It reads `logs/latest-state.json` locally and needs no truck key in the second terminal. `last_day` is the actual outcome; the forecast is for the *next* day. After the next day starts, run `status.py` again to see how the previous order performed.
 
 For a practice run, pass its file path, for example `python3 analyze.py logs/practice-YYYYMMDDTHHMMSSZ-PID.jsonl`. Look for low sell-through (too much food), frequent stockouts (potential missed sales), low average profit by spot, API errors, and slow order submissions. Use the same `--seed` when comparing two versions of `decide(state)` so weather and events are comparable. Repeat across several seeds and rival counts; a single practice game is not a reliable score against real teams.
 
